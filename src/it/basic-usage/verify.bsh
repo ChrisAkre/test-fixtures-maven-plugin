@@ -1,0 +1,11 @@
+File jarFile = new File( basedir, "target/basic-usage-test-fixtures-1.0.0-SNAPSHOT.jar" );
+if ( !jarFile.isFile() )
+{
+    throw new java.io.FileNotFoundException( "Could not find generated JAR: " + jarFile );
+}
+
+File pomFile = new File( basedir, "target/basic-usage-test-fixtures-1.0.0-SNAPSHOT.pom" );
+if ( !pomFile.isFile() )
+{
+    throw new java.io.FileNotFoundException( "Could not find generated POM: " + pomFile );
+}

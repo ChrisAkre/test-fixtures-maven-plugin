@@ -1,0 +1,17 @@
+target/
+.idea/
+*.iml
+*.iws
+*.ipr
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+/build/
+.settings/
+.classpath
+.project

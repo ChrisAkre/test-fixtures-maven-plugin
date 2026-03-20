@@ -1,11 +1,60 @@
+import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
+import java.util.Enumeration;
+import java.io.File;
+import java.io.FileInputStream;
+import java.util.Scanner;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
 File jarFile = new File( basedir, "target/basic-usage-test-fixtures-1.0.0-SNAPSHOT.jar" );
 if ( !jarFile.isFile() )
 {
     throw new java.io.FileNotFoundException( "Could not find generated JAR: " + jarFile );
 }
 
+// Validate the contents of the generated JAR
+java.util.jar.JarInputStream jis = new java.util.jar.JarInputStream(new java.io.FileInputStream(jarFile));
+java.util.jar.JarEntry entry;
+while ( (entry = jis.getNextJarEntry()) != null )
+{
+    String name = entry.getName();
+    // Allow directories
+    if ( entry.isDirectory() )
+    {
+        continue;
+    }
+    // Expected files: META-INF/MANIFEST.MF, sample/FixtureClass.class
+    if ( !name.equals("META-INF/MANIFEST.MF") && !name.startsWith("sample/") )
+    {
+        jis.close();
+        throw new Exception("Unexpected file found in JAR: " + name);
+    }
+}
+jis.close();
+
 File pomFile = new File( basedir, "target/basic-usage-test-fixtures-1.0.0-SNAPSHOT.pom" );
 if ( !pomFile.isFile() )
 {
     throw new java.io.FileNotFoundException( "Could not find generated POM: " + pomFile );
+}
+
+// Validate the synthetic POM contents
+String pomContent = new Scanner(pomFile).useDelimiter("\\Z").next();
+
+// Check for the main artifact dependency
+if ( !pomContent.contains("<artifactId>basic-usage</artifactId>") )
+{
+    throw new Exception("Synthetic POM missing dependency on main artifact");
+}
+
+// Check for explicit fixture dependencies without <scope>test</scope> since they are compile scope for fixtures
+if ( !pomContent.contains("<artifactId>mockito-core</artifactId>") )
+{
+    throw new Exception("Synthetic POM missing mockito-core dependency");
+}
+
+if ( pomContent.contains("<scope>test</scope>") )
+{
+    throw new Exception("Synthetic POM shouldn't have test scope dependencies since fixtures should expose them as compile");
 }

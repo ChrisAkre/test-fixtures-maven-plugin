@@ -23,7 +23,7 @@ import java.util.List;
  */
 @Mojo(
     name = "package-fixtures",
-    defaultPhase = LifecyclePhase.TEST,
+    defaultPhase = LifecyclePhase.PACKAGE,
     threadSafe = true
 )
 public class PackageFixturesMojo extends AbstractMojo {

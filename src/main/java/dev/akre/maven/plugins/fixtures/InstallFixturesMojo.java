@@ -21,7 +21,7 @@ import java.util.Collections;
  */
 @Mojo(
     name = "install-fixtures",
-    defaultPhase = LifecyclePhase.TEST,
+    defaultPhase = LifecyclePhase.INSTALL,
     threadSafe = true
 )
 public class InstallFixturesMojo extends AbstractMojo {

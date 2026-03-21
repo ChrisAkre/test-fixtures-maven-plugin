@@ -4,7 +4,7 @@
 
     <groupId>dev.akre</groupId>
     <artifactId>test-fixtures-maven-plugin</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
 
     <name>Test Fixtures Maven Plugin</name>
@@ -247,7 +247,7 @@
         <connection>scm:git:https://github.com/ChrisAkre/test-fixtures-maven-plugin.git</connection>
         <developerConnection>scm:git:https://github.com/ChrisAkre/test-fixtures-maven-plugin.git</developerConnection>
         <url>https://github.com/ChrisAkre/test-fixtures-maven-plugin</url>
-        <tag>test-fixtures-maven-plugin-1.0.0</tag>
+        <tag>HEAD</tag>
     </scm>
     <distributionManagement>
         <repository>

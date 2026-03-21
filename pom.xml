@@ -254,7 +254,7 @@
     <distributionManagement>
         <repository>
             <id>ossrh</id>
-            <url>https://central.sonatype.com/</url>
+            <url>https://central.sonatype.com/service/local/staging/deploy/maven2/</url>
         </repository>
         <snapshotRepository>
             <id>github</id>

@@ -184,6 +184,8 @@
                     </execution>
                 </executions>
             </plugin>
+        </plugins>
+    </build>
     <profiles>
         <profile>
             <id>sonatype</id>

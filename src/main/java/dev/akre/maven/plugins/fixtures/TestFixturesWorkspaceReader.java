@@ -12,7 +12,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 
-@Named("test-fixtures-reader")
+@Named("ide")
 @Singleton
 public class TestFixturesWorkspaceReader implements WorkspaceReader {
 

@@ -6,7 +6,6 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.repository.WorkspaceReader;
 import org.eclipse.aether.repository.WorkspaceRepository;
 
-import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 import java.io.File;
@@ -21,8 +20,7 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
 
     private MavenSession session;
 
-    @Inject
-    public TestFixturesWorkspaceReader(MavenSession session) {
+    public void init(MavenSession session) {
         this.session = session;
     }
 
@@ -33,6 +31,11 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
 
     @Override
     public File findArtifact(Artifact artifact) {
+        if (session == null) {
+            return null;
+        }
+
+        // 1. Handle our custom test-fixtures artifacts
         if (artifact.getArtifactId() != null && artifact.getArtifactId().endsWith("-test-fixtures")) {
             String baseArtifactId = artifact.getArtifactId().substring(0, artifact.getArtifactId().length() - "-test-fixtures".length());
             for (MavenProject project : session.getProjects()) {
@@ -45,6 +48,24 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
                 }
             }
         }
+
+        // 2. Fallback: Handle regular reactor artifacts if they aren't being resolved for some reason
+        // This helps in some Invoker environments where the default reactor reader might be partially disabled or shadowed.
+        for (MavenProject project : session.getProjects()) {
+            if (project.getGroupId().equals(artifact.getGroupId()) && project.getArtifactId().equals(artifact.getArtifactId()) && project.getVersion().equals(artifact.getVersion())) {
+                 if ("pom".equals(artifact.getExtension())) {
+                     return project.getFile();
+                 } else if ("jar".equals(artifact.getExtension())) {
+                     // If it's the main artifact, return the classes directory if the jar doesn't exist yet
+                     File jar = project.getArtifact().getFile();
+                     if (jar != null && jar.exists()) {
+                         return jar;
+                     }
+                     return new File(project.getBuild().getOutputDirectory());
+                 }
+            }
+        }
+
         return null;
     }
 

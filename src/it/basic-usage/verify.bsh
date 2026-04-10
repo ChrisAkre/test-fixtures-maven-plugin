@@ -24,8 +24,8 @@ while ( (entry = jis.getNextJarEntry()) != null )
     {
         continue;
     }
-    // Expected files: META-INF/MANIFEST.MF, sample/FixtureClass.class
-    if ( !name.equals("META-INF/MANIFEST.MF") && !name.startsWith("sample/") )
+    // Expected files: META-INF/MANIFEST.MF, sample/MainClassAssert.class
+    if ( !name.equals("META-INF/MANIFEST.MF") && !name.startsWith("sample/MainClassAssert.class") )
     {
         jis.close();
         throw new Exception("Unexpected file found in JAR: " + name);
@@ -49,9 +49,9 @@ if ( !pomContent.contains("<artifactId>basic-usage</artifactId>") )
 }
 
 // Check for explicit fixture dependencies without <scope>test</scope> since they are compile scope for fixtures
-if ( !pomContent.contains("<artifactId>mockito-core</artifactId>") )
+if ( !pomContent.contains("<artifactId>assertj-core</artifactId>") )
 {
-    throw new Exception("Synthetic POM missing mockito-core dependency");
+    throw new Exception("Synthetic POM missing assertj-core dependency");
 }
 
 if ( pomContent.contains("<scope>test</scope>") )

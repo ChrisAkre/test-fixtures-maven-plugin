@@ -1,10 +1,6 @@
 package dev.akre.maven.plugins.fixtures;
 
 import org.apache.maven.model.Dependency;
-import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
-import org.apache.maven.model.Plugin;
-import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -29,7 +25,6 @@ import javax.inject.Inject;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,9 +63,6 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes", readonly = true)
     private File packageOutputDirectory;
 
-    @Parameter(defaultValue = "${project.build.directory}/${project.artifactId}-test-fixtures-${project.version}.pom")
-    private File fixturesPom;
-
     @Parameter
     private List<Dependency> fixtureDependencies = new ArrayList<>();
 
@@ -98,7 +90,7 @@ public class CompileFixturesMojo extends AbstractMojo {
         if (!fixturesOutputDirectory.exists() && !fixturesOutputDirectory.mkdirs()) {
             throw new MojoExecutionException("Failed to create test output directory: " + fixturesOutputDirectory);
         }
-        
+
         if (!packageOutputDirectory.exists() && !packageOutputDirectory.mkdirs()) {
             throw new MojoExecutionException("Failed to create package output directory: " + packageOutputDirectory);
         }
@@ -127,7 +119,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                     project.getModel().addDependency(testDep);
                 }
             }
-            
+
             // Also explicitly resolve and add them to test classpath elements just in case
             List<String> resolvedDeps = resolveFixtureDependencies();
             for (String depPath : resolvedDeps) {
@@ -140,9 +132,6 @@ public class CompileFixturesMojo extends AbstractMojo {
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to inject fixtures into test classpath", e);
         }
-
-        // Generate synthetic POM for the fixtures
-        generateSyntheticPom();
     }
 
     private void compileSources(List<String> sourceFiles) throws MojoExecutionException {
@@ -154,34 +143,6 @@ public class CompileFixturesMojo extends AbstractMojo {
         compilerArgs.add(fixturesOutputDirectory.getAbsolutePath());
         compilerArgs.add("-cp");
         compilerArgs.add(classpath);
-        if (project.getBuildPlugins() != null) {
-            for (Plugin plugin : project.getBuildPlugins()) {
-                if ("org.apache.maven.plugins".equals(plugin.getGroupId()) && "maven-compiler-plugin".equals(plugin.getArtifactId())) {
-                    Object config = plugin.getConfiguration();
-                    if (config instanceof Xpp3Dom) {
-                        Xpp3Dom dom = (Xpp3Dom) config;
-                        Xpp3Dom releaseDom = dom.getChild("release");
-                        if (releaseDom != null && releaseDom.getValue() != null && !releaseDom.getValue().trim().isEmpty()) {
-                            compilerArgs.add("--release");
-                            compilerArgs.add(releaseDom.getValue().trim());
-                        } else {
-                            Xpp3Dom sourceDom = dom.getChild("source");
-                            if (sourceDom != null && sourceDom.getValue() != null && !sourceDom.getValue().trim().isEmpty()) {
-                                compilerArgs.add("-source");
-                                compilerArgs.add(sourceDom.getValue().trim());
-                            }
-                            Xpp3Dom targetDom = dom.getChild("target");
-                            if (targetDom != null && targetDom.getValue() != null && !targetDom.getValue().trim().isEmpty()) {
-                                compilerArgs.add("-target");
-                                compilerArgs.add(targetDom.getValue().trim());
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
         compilerArgs.addAll(sourceFiles);
 
         // Invoke the system Java compiler
@@ -207,7 +168,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                 try {
                     Files.createDirectories(destOutput.getParent());
                     Files.copy(source, destOutput, StandardCopyOption.REPLACE_EXISTING);
-                    
+
                     Files.createDirectories(destPackage.getParent());
                     Files.copy(source, destPackage, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
@@ -246,10 +207,10 @@ public class CompileFixturesMojo extends AbstractMojo {
         try {
             classpathElements.add(project.getBuild().getOutputDirectory());
             classpathElements.addAll(project.getTestClasspathElements());
-            
+
             List<String> resolvedDependencies = resolveFixtureDependencies();
             classpathElements.addAll(resolvedDependencies);
-            
+
         } catch (Exception e) {
             throw new MojoExecutionException("Error building classpath", e);
         }
@@ -261,7 +222,7 @@ public class CompileFixturesMojo extends AbstractMojo {
 
     private List<String> resolveFixtureDependencies() throws MojoExecutionException {
         List<String> resolvedPaths = new ArrayList<>();
-        
+
         if (fixtureDependencies == null || fixtureDependencies.isEmpty()) {
             return resolvedPaths;
         }
@@ -307,36 +268,6 @@ public class CompileFixturesMojo extends AbstractMojo {
                         .collect(Collectors.toList());
         } catch (IOException e) {
             throw new MojoExecutionException("Error scanning for Java files in " + sourceDir, e);
-        }
-    }
-
-    private void generateSyntheticPom() throws MojoExecutionException {
-        Model model = new Model();
-        model.setModelVersion("4.0.0");
-        model.setGroupId(project.getGroupId());
-        model.setArtifactId(project.getArtifactId() + "-test-fixtures");
-        model.setVersion(project.getVersion());
-        model.setPackaging("jar");
-        model.setDescription("Test fixtures for " + project.getArtifactId());
-
-        // The test fixtures depend on the main project classes
-        Dependency mainProjectDep = new Dependency();
-        mainProjectDep.setGroupId(project.getGroupId());
-        mainProjectDep.setArtifactId(project.getArtifactId());
-        mainProjectDep.setVersion(project.getVersion());
-        model.addDependency(mainProjectDep);
-
-        // Add explicit fixture dependencies
-        if (fixtureDependencies != null) {
-            for (Dependency dep : fixtureDependencies) {
-                model.addDependency(dep);
-            }
-        }
-
-        try (FileOutputStream fos = new FileOutputStream(fixturesPom)) {
-            new MavenXpp3Writer().write(fos, model);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to write synthetic POM", e);
         }
     }
 }

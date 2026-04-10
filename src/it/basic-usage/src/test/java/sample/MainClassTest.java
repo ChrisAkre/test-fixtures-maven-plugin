@@ -1,13 +1,13 @@
 package sample;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static sample.MainClassAssert.assertThat;
 
 public class MainClassTest {
     
     @Test
-    public void testMockedMain() {
-        MainClass mock = FixtureClass.mockMain();
-        assertEquals("Hello from Fixture", mock.greeting());
+    public void testMainGreeting() {
+        MainClass main = new MainClass();
+        assertThat(main).hasGreeting("Hello World");
     }
 }

@@ -42,9 +42,10 @@ jobs:
       - name: Execute Release
         run: |
           mvn --batch-mode release:prepare release:perform \
+            -Psonatype \
             -Dpassword=${{ secrets.GITHUB_TOKEN }} \
             -Dgpg.passphrase="${GPG_PASSPHRASE}" \
-            -Darguments="-DskipTests -Dprotoc.skip=true -Dgpg.loopback=true"
+            -Darguments="-DskipTests -Dprotoc.skip=true -Dgpg.loopback=true -Psonatype"
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_KEY_PASSPHRASE }}
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}

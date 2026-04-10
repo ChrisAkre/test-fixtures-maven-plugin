@@ -1,0 +1,24 @@
+import java.io.*;
+
+File fixturePom = new File( basedir, "module-a/target/module-a-test-fixtures-1.0.0-SNAPSHOT.pom" );
+if ( !fixturePom.exists() )
+{
+    System.err.println( "Fixture synthetic POM is missing: " + fixturePom.getAbsolutePath() );
+    return false;
+}
+
+File fixtureClass = new File( basedir, "module-a/target/test-fixtures-classes/sample/a/FixtureClassA.class" );
+if ( !fixtureClass.exists() )
+{
+    System.err.println( "Fixture class is missing: " + fixtureClass.getAbsolutePath() );
+    return false;
+}
+
+File bTestReports = new File( basedir, "module-b/target/surefire-reports" );
+if ( !bTestReports.exists() )
+{
+    System.err.println( "Surefire reports in module-b are missing: " + bTestReports.getAbsolutePath() );
+    return false;
+}
+
+return true;

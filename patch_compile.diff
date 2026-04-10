@@ -1,0 +1,74 @@
+--- src/main/java/dev/akre/maven/plugins/fixtures/CompileFixturesMojo.java
++++ src/main/java/dev/akre/maven/plugins/fixtures/CompileFixturesMojo.java
+@@ -1,6 +1,8 @@
+ package dev.akre.maven.plugins.fixtures;
+
+ import org.apache.maven.model.Dependency;
++import org.apache.maven.model.Model;
++import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
+ import org.apache.maven.plugin.AbstractMojo;
+ import org.apache.maven.plugin.MojoExecutionException;
+ import org.apache.maven.plugins.annotations.LifecyclePhase;
+@@ -23,6 +25,7 @@
+ import javax.inject.Inject;
+ import javax.tools.JavaCompiler;
+ import javax.tools.ToolProvider;
+ import java.io.File;
++import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.nio.file.Files;
+@@ -58,6 +61,9 @@
+     @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes", readonly = true)
+     private File packageOutputDirectory;
+
++    @Parameter(defaultValue = "${project.build.directory}/${project.artifactId}-test-fixtures-${project.version}.pom")
++    private File fixturesPom;
++
+     @Parameter
+     private List<Dependency> fixtureDependencies = new ArrayList<>();
+
+@@ -112,6 +118,9 @@
+         } catch (Exception e) {
+             throw new MojoExecutionException("Failed to inject fixtures into test classpath", e);
+         }
++
++        // Generate synthetic POM for the fixtures
++        generateSyntheticPom();
+     }
+
+     private void compileSources(List<String> sourceFiles) throws MojoExecutionException {
+@@ -230,4 +239,34 @@
+             throw new MojoExecutionException("Error scanning for Java files in " + sourceDir, e);
+         }
+     }
++
++    private void generateSyntheticPom() throws MojoExecutionException {
++        Model model = new Model();
++        model.setModelVersion("4.0.0");
++        model.setGroupId(project.getGroupId());
++        model.setArtifactId(project.getArtifactId() + "-test-fixtures");
++        model.setVersion(project.getVersion());
++        model.setPackaging("jar");
++        model.setDescription("Test fixtures for " + project.getArtifactId());
++
++        // The test fixtures depend on the main project classes
++        Dependency mainProjectDep = new Dependency();
++        mainProjectDep.setGroupId(project.getGroupId());
++        mainProjectDep.setArtifactId(project.getArtifactId());
++        mainProjectDep.setVersion(project.getVersion());
++        model.addDependency(mainProjectDep);
++
++        // Add explicit fixture dependencies
++        if (fixtureDependencies != null) {
++            for (Dependency dep : fixtureDependencies) {
++                model.addDependency(dep);
++            }
++        }
++
++        try (FileOutputStream fos = new FileOutputStream(fixturesPom)) {
++            new MavenXpp3Writer().write(fos, model);
++        } catch (IOException e) {
++            throw new MojoExecutionException("Failed to write synthetic POM", e);
++        }
++    }
+ }

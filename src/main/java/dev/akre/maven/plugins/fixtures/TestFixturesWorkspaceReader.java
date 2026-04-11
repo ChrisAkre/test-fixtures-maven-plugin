@@ -2,8 +2,6 @@ package dev.akre.maven.plugins.fixtures;
 
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.project.MavenProject;
-import org.codehaus.plexus.interpolation.MapBasedValueSource;
-import org.codehaus.plexus.interpolation.StringSearchInterpolator;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.repository.WorkspaceReader;
 import org.eclipse.aether.repository.WorkspaceRepository;
@@ -12,81 +10,18 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 import java.io.File;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Supplier;
 
 @Named("ide")
 @Singleton
 public class TestFixturesWorkspaceReader implements WorkspaceReader {
 
-    private static final String FIXTURES_INIT_TEMPLATE = "${groupId}:${artifactId}-test-fixtures:${extension}";
-    private static final String FIXTURES_LOOKUP_TEMPLATE = "${groupId}:${artifactId}:${extension}";
-    private static final String REACTOR_TEMPLATE = "${groupId}:${artifactId}:${version}:${extension}";
-
     private final WorkspaceRepository repository = new WorkspaceRepository("test-fixtures");
 
-    private volatile MavenSession session;
-    private volatile Map<String, Supplier<File>> artifactMap = Collections.emptyMap();
+    private MavenSession session;
 
     public void init(MavenSession session) {
         this.session = session;
-        if (session != null && session.getProjects() != null) {
-            Map<String, Supplier<File>> newArtifactMap = new HashMap<>();
-            for (MavenProject project : session.getProjects()) {
-                // 1. Pre-calculate test-fixtures paths (GA:E)
-                format(FIXTURES_INIT_TEMPLATE, project, "jar").ifPresent(k ->
-                    newArtifactMap.put(k, () -> new File(project.getBuild().getDirectory(), "test-fixtures-classes")));
-                format(FIXTURES_INIT_TEMPLATE, project, "pom").ifPresent(k ->
-                    newArtifactMap.put(k, () -> new File(project.getBuild().getDirectory(), project.getArtifactId() + "-test-fixtures-" + project.getVersion() + ".pom")));
-
-                // 2. Pre-calculate regular reactor artifacts (GAV:E)
-                format(REACTOR_TEMPLATE, project, "pom").ifPresent(k ->
-                    newArtifactMap.put(k, () -> project.getFile()));
-                format(REACTOR_TEMPLATE, project, "jar").ifPresent(k ->
-                    newArtifactMap.put(k, () -> {
-                        // If it's the main artifact, return the classes directory if the jar doesn't exist yet
-                        File jar = project.getArtifact().getFile();
-                        if (jar != null && jar.exists()) {
-                            return jar;
-                        }
-                        return new File(project.getBuild().getOutputDirectory());
-                    }));
-            }
-            this.artifactMap = Collections.unmodifiableMap(newArtifactMap);
-        } else {
-            this.artifactMap = Collections.emptyMap();
-        }
-    }
-
-    private Optional<String> format(String template, MavenProject project, String extension) {
-        Map<String, String> values = new HashMap<>();
-        values.put("groupId", project.getGroupId());
-        values.put("artifactId", project.getArtifactId());
-        values.put("version", project.getVersion());
-        values.put("extension", extension);
-        return interpolate(template, values);
-    }
-
-    private Optional<String> format(String template, Artifact artifact) {
-        Map<String, String> values = new HashMap<>();
-        values.put("groupId", artifact.getGroupId());
-        values.put("artifactId", artifact.getArtifactId());
-        values.put("version", artifact.getVersion());
-        values.put("extension", artifact.getExtension());
-        return interpolate(template, values);
-    }
-
-    private Optional<String> interpolate(String template, Map<String, String> values) {
-        StringSearchInterpolator interpolator = new StringSearchInterpolator();
-        interpolator.addValueSource(new MapBasedValueSource(values));
-        try {
-            return Optional.ofNullable(interpolator.interpolate(template));
-        } catch (Exception e) {
-            return Optional.empty();
-        }
     }
 
     @Override
@@ -100,11 +35,43 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
             return null;
         }
 
-        return Optional.ofNullable(artifact)
-                .flatMap(a -> format(FIXTURES_LOOKUP_TEMPLATE, a).map(artifactMap::get)
-                        .or(() -> format(REACTOR_TEMPLATE, a).map(artifactMap::get)))
-                .map(Supplier::get)
-                .orElse(null);
+        // NOTE: The O(N) loop here is intentional. In a typical build, this is only called
+        // a handful of times, making the performance impact of a linear scan negligible.
+        // Maintaining a Map-based cache would add unnecessary complexity and thread-safety
+        // overhead without measurable benefits.
+
+        // 1. Handle our custom test-fixtures artifacts
+        if (artifact.getArtifactId() != null && artifact.getArtifactId().endsWith("-test-fixtures")) {
+            String baseArtifactId = artifact.getArtifactId().substring(0, artifact.getArtifactId().length() - "-test-fixtures".length());
+            for (MavenProject project : session.getProjects()) {
+                if (project.getGroupId().equals(artifact.getGroupId()) && project.getArtifactId().equals(baseArtifactId)) {
+                    if ("jar".equals(artifact.getExtension())) {
+                        return new File(project.getBuild().getDirectory(), "test-fixtures-classes");
+                    } else if ("pom".equals(artifact.getExtension())) {
+                        return new File(project.getBuild().getDirectory(), project.getArtifactId() + "-test-fixtures-" + project.getVersion() + ".pom");
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: Handle regular reactor artifacts if they aren't being resolved for some reason
+        // This helps in some Invoker environments where the default reactor reader might be partially disabled or shadowed.
+        for (MavenProject project : session.getProjects()) {
+            if (project.getGroupId().equals(artifact.getGroupId()) && project.getArtifactId().equals(artifact.getArtifactId()) && project.getVersion().equals(artifact.getVersion())) {
+                 if ("pom".equals(artifact.getExtension())) {
+                     return project.getFile();
+                 } else if ("jar".equals(artifact.getExtension())) {
+                     // If it's the main artifact, return the classes directory if the jar doesn't exist yet
+                     File jar = project.getArtifact().getFile();
+                     if (jar != null && jar.exists()) {
+                         return jar;
+                     }
+                     return new File(project.getBuild().getOutputDirectory());
+                 }
+            }
+        }
+
+        return null;
     }
 
     @Override

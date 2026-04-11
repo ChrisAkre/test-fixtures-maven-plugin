@@ -1,17 +1,23 @@
 package dev.akre.maven.plugins.fixtures;
 
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.model.Plugin;
-import org.codehaus.plexus.util.xml.Xpp3Dom;
+import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.plugin.AbstractMojo;
+import org.apache.maven.plugin.BuildPluginManager;
+import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugin.descriptor.MojoDescriptor;
+import org.apache.maven.plugin.descriptor.PluginDescriptor;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
+import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
@@ -26,8 +32,6 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.filter.DependencyFilterUtils;
 
 import javax.inject.Inject;
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -41,6 +45,8 @@ import java.util.stream.Stream;
 
 /**
  * Compiles the test fixtures in isolation during the process-classes phase.
+ * It leverages the configured maven-compiler-plugin to ensure all project settings
+ * (like annotation processors, compiler flags, etc.) are respected.
  */
 @Mojo(
     name = "compile-fixtures",
@@ -53,18 +59,18 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    private MavenSession session;
+
     @Parameter(defaultValue = "${project.basedir}/src/testFixtures/java")
     private File fixturesSourceDirectory;
 
     @Parameter(defaultValue = "${project.basedir}/src/testFixtures/resources")
     private File fixturesResourcesDirectory;
 
-    // Output directory for fixtures. Temporary workaround: compile directly into test-classes
-    // so maven-compiler-plugin and surefire pick it up seamlessly.
     @Parameter(defaultValue = "${project.build.testOutputDirectory}")
     private File fixturesOutputDirectory;
 
-    // Temporary holding directory for packaging later
     @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes", readonly = true)
     private File packageOutputDirectory;
 
@@ -82,6 +88,9 @@ public class CompileFixturesMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     private List<RemoteRepository> remoteRepositories;
+
+    @Inject
+    private BuildPluginManager pluginManager;
 
     @Override
     public void execute() throws MojoExecutionException {
@@ -110,12 +119,7 @@ public class CompileFixturesMojo extends AbstractMojo {
 
         // Compile Java Sources
         if (hasJavaSources) {
-            List<String> sourceFiles = findJavaFiles(fixturesSourceDirectory.toPath());
-            if (sourceFiles.isEmpty()) {
-                getLog().info("No Java sources found in test fixtures directory.");
-            } else {
-                compileSources(sourceFiles);
-            }
+            compileSources();
         }
 
         // Inject explicit dependencies into the standard Maven test classpath
@@ -145,58 +149,105 @@ public class CompileFixturesMojo extends AbstractMojo {
         generateSyntheticPom();
     }
 
-    private void compileSources(List<String> sourceFiles) throws MojoExecutionException {
-        String classpath = buildCompilerClasspath();
+    private void compileSources() throws MojoExecutionException {
+        Plugin compilerPlugin = project.getPlugin("org.apache.maven.plugins:maven-compiler-plugin");
+        if (compilerPlugin == null) {
+            throw new MojoExecutionException("maven-compiler-plugin not found in project. Cannot compile fixtures.");
+        }
 
-        // Prepare the compiler arguments
-        List<String> compilerArgs = new ArrayList<>();
-        compilerArgs.add("-d");
-        compilerArgs.add(fixturesOutputDirectory.getAbsolutePath());
-        compilerArgs.add("-cp");
-        compilerArgs.add(classpath);
-        if (project.getBuildPlugins() != null) {
-            for (Plugin plugin : project.getBuildPlugins()) {
-                if ("org.apache.maven.plugins".equals(plugin.getGroupId()) && "maven-compiler-plugin".equals(plugin.getArtifactId())) {
-                    Object config = plugin.getConfiguration();
-                    if (config instanceof Xpp3Dom) {
-                        Xpp3Dom dom = (Xpp3Dom) config;
-                        Xpp3Dom releaseDom = dom.getChild("release");
-                        if (releaseDom != null && releaseDom.getValue() != null && !releaseDom.getValue().trim().isEmpty()) {
-                            compilerArgs.add("--release");
-                            compilerArgs.add(releaseDom.getValue().trim());
-                        } else {
-                            Xpp3Dom sourceDom = dom.getChild("source");
-                            if (sourceDom != null && sourceDom.getValue() != null && !sourceDom.getValue().trim().isEmpty()) {
-                                compilerArgs.add("-source");
-                                compilerArgs.add(sourceDom.getValue().trim());
-                            }
-                            Xpp3Dom targetDom = dom.getChild("target");
-                            if (targetDom != null && targetDom.getValue() != null && !targetDom.getValue().trim().isEmpty()) {
-                                compilerArgs.add("-target");
-                                compilerArgs.add(targetDom.getValue().trim());
-                            }
-                        }
+        // 1. Load the plugin and mojo descriptor
+        PluginDescriptor pluginDescriptor;
+        try {
+            pluginDescriptor = pluginManager.loadPlugin(compilerPlugin, remoteRepositories, repoSession);
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to load maven-compiler-plugin", e);
+        }
+
+        MojoDescriptor mojoDescriptor = pluginDescriptor.getMojo("compile");
+        if (mojoDescriptor == null) {
+            throw new MojoExecutionException("Could not find goal 'compile' in maven-compiler-plugin");
+        }
+
+        // 2. Prepare the compilation environment
+        List<String> originalSourceRoots = new ArrayList<>(project.getCompileSourceRoots());
+        String originalOutputDirectory = project.getBuild().getOutputDirectory();
+
+        List<String> fixtureDepPaths = resolveFixtureDependencies();
+
+        try {
+            // 3. Temporarily swap project state to point to fixtures
+            project.getCompileSourceRoots().clear();
+            project.addCompileSourceRoot(fixturesSourceDirectory.getAbsolutePath());
+            project.getBuild().setOutputDirectory(fixturesOutputDirectory.getAbsolutePath());
+
+            // 4. Prepare the configuration DOM for the compiler plugin
+            Xpp3Dom pomConfig = (Xpp3Dom) compilerPlugin.getConfiguration();
+            Xpp3Dom configuration = new Xpp3Dom("configuration");
+            if (pomConfig != null) {
+                // Clone existing configuration except for the parts we're overriding
+                for (Xpp3Dom child : pomConfig.getChildren()) {
+                    if (!"compileSourceRoots".equals(child.getName()) &&
+                        !"outputDirectory".equals(child.getName()) &&
+                        !"classpathElements".equals(child.getName())) {
+                        configuration.addChild(new Xpp3Dom(child));
                     }
-                    break;
                 }
             }
+
+            // Override outputDirectory
+            setConfigurationValue(configuration, "outputDirectory", fixturesOutputDirectory.getAbsolutePath());
+
+            // Pass the specialized classpath via configuration
+            Xpp3Dom classpathElementsDom = new Xpp3Dom("classpathElements");
+            List<String> compilationClasspath = new ArrayList<>();
+            compilationClasspath.add(originalOutputDirectory);
+            compilationClasspath.addAll(project.getTestClasspathElements());
+            compilationClasspath.addAll(fixtureDepPaths);
+            compilationClasspath.stream().distinct().forEach(element -> {
+                Xpp3Dom el = new Xpp3Dom("element");
+                el.setValue(element);
+                classpathElementsDom.addChild(el);
+            });
+            configuration.addChild(classpathElementsDom);
+
+            // Set source roots in configuration as well
+            Xpp3Dom sourceRootsDom = new Xpp3Dom("compileSourceRoots");
+            Xpp3Dom root = new Xpp3Dom("compileSourceRoot");
+            root.setValue(fixturesSourceDirectory.getAbsolutePath());
+            sourceRootsDom.addChild(root);
+            configuration.addChild(sourceRootsDom);
+
+            // 5. Execute the compiler:compile goal
+            MojoExecution execution = new MojoExecution(mojoDescriptor, configuration);
+            pluginManager.executeMojo(session, execution);
+
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to execute maven-compiler-plugin:compile", e);
+        } finally {
+            // 6. Restore original project state
+            project.getCompileSourceRoots().clear();
+            for (String root : originalSourceRoots) {
+                project.addCompileSourceRoot(root);
+            }
+            project.getBuild().setOutputDirectory(originalOutputDirectory);
         }
 
-        compilerArgs.addAll(sourceFiles);
-
-        // Invoke the system Java compiler
-        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        if (compiler == null) {
-            throw new MojoExecutionException("Cannot find System Java Compiler. Ensure you are running a JDK, not a JRE.");
-        }
-
-        int result = compiler.run(null, null, null, compilerArgs.toArray(new String[0]));
-        if (result != 0) {
-            throw new MojoExecutionException("Test fixtures compilation failed.");
-        }
-
-        // Copy compiled classes to package output directory for packaging
+        // 7. Copy compiled classes to package output directory for packaging
         copyDirectory(fixturesOutputDirectory, packageOutputDirectory);
+    }
+
+    private void setConfigurationValue(Xpp3Dom config, String name, String value) {
+        Xpp3Dom child = config.getChild(name);
+        if (child == null) {
+            child = new Xpp3Dom(name);
+            config.addChild(child);
+        }
+        child.setValue(value);
+    }
+
+    private void executeMojo(Plugin plugin, String goal, Xpp3Dom configuration) throws MojoExecutionException {
+        // This method is now partially replaced by inline logic in compileSources to handle
+        // descriptor loading correctly as per Maven 3 API.
     }
 
     private void processResources() throws MojoExecutionException {
@@ -240,25 +291,6 @@ public class CompileFixturesMojo extends AbstractMojo {
         }
     }
 
-    private String buildCompilerClasspath() throws MojoExecutionException {
-        List<String> classpathElements = new ArrayList<>();
-
-        try {
-            classpathElements.add(project.getBuild().getOutputDirectory());
-            classpathElements.addAll(project.getTestClasspathElements());
-            
-            List<String> resolvedDependencies = resolveFixtureDependencies();
-            classpathElements.addAll(resolvedDependencies);
-            
-        } catch (Exception e) {
-            throw new MojoExecutionException("Error building classpath", e);
-        }
-
-        return classpathElements.stream()
-                .distinct()
-                .collect(Collectors.joining(File.pathSeparator));
-    }
-
     private List<String> resolveFixtureDependencies() throws MojoExecutionException {
         List<String> resolvedPaths = new ArrayList<>();
         
@@ -299,17 +331,6 @@ public class CompileFixturesMojo extends AbstractMojo {
         return resolvedPaths;
     }
 
-    private List<String> findJavaFiles(Path sourceDir) throws MojoExecutionException {
-        try (Stream<Path> paths = Files.walk(sourceDir)) {
-            return paths.filter(Files::isRegularFile)
-                        .filter(p -> p.toString().endsWith(".java"))
-                        .map(Path::toString)
-                        .collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new MojoExecutionException("Error scanning for Java files in " + sourceDir, e);
-        }
-    }
-
     private void generateSyntheticPom() throws MojoExecutionException {
         Model model = new Model();
         model.setModelVersion("4.0.0");
@@ -319,14 +340,12 @@ public class CompileFixturesMojo extends AbstractMojo {
         model.setPackaging("jar");
         model.setDescription("Test fixtures for " + project.getArtifactId());
 
-        // The test fixtures depend on the main project classes
         Dependency mainProjectDep = new Dependency();
         mainProjectDep.setGroupId(project.getGroupId());
         mainProjectDep.setArtifactId(project.getArtifactId());
         mainProjectDep.setVersion(project.getVersion());
         model.addDependency(mainProjectDep);
 
-        // Add explicit fixture dependencies
         if (fixtureDependencies != null) {
             for (Dependency dep : fixtureDependencies) {
                 model.addDependency(dep);

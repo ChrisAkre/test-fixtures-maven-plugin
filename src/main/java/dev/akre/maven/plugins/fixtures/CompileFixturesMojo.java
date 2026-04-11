@@ -1,5 +1,9 @@
 package dev.akre.maven.plugins.fixtures;
 
+import org.apache.maven.artifact.Artifact;
+import org.apache.maven.artifact.DefaultArtifact;
+import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
+import org.apache.maven.artifact.versioning.VersionRange;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
@@ -11,7 +15,6 @@ import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.descriptor.MojoDescriptor;
 import org.apache.maven.plugin.descriptor.PluginDescriptor;
-import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -20,8 +23,6 @@ import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
-import org.eclipse.aether.artifact.Artifact;
-import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.graph.DependencyFilter;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -39,7 +40,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -92,6 +95,9 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Inject
     private BuildPluginManager pluginManager;
 
+    @Inject
+    private ArtifactHandlerManager artifactHandlerManager;
+
     @Override
     public void execute() throws MojoExecutionException {
         boolean hasJavaSources = fixturesSourceDirectory.exists() && fixturesSourceDirectory.isDirectory();
@@ -132,8 +138,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                 }
             }
             
-            // Also explicitly resolve and add them to test classpath elements just in case
-            List<String> resolvedDeps = resolveFixtureDependencies();
+            List<String> resolvedDeps = resolveFixtureDependencyPaths();
             for (String depPath : resolvedDeps) {
                 if (!project.getTestClasspathElements().contains(depPath)) {
                     project.getTestClasspathElements().add(depPath);
@@ -168,61 +173,85 @@ public class CompileFixturesMojo extends AbstractMojo {
             throw new MojoExecutionException("Could not find goal 'compile' in maven-compiler-plugin");
         }
 
-        // 2. Prepare the compilation environment
+        // 2. Prepare the compilation environment by swapping project state
         List<String> originalSourceRoots = new ArrayList<>(project.getCompileSourceRoots());
         String originalOutputDirectory = project.getBuild().getOutputDirectory();
-
-        List<String> fixtureDepPaths = resolveFixtureDependencies();
+        Set<Artifact> originalArtifacts = project.getArtifacts() != null ?
+            new LinkedHashSet<>(project.getArtifacts()) : new LinkedHashSet<>();
 
         try {
-            // 3. Temporarily swap project state to point to fixtures
+            // 3. Swap state to point to fixtures
             project.getCompileSourceRoots().clear();
             project.addCompileSourceRoot(fixturesSourceDirectory.getAbsolutePath());
             project.getBuild().setOutputDirectory(fixturesOutputDirectory.getAbsolutePath());
 
+            // Synthesize the classpath required for fixtures:
+            // - The main project classes
+            // - All existing project artifacts (including test dependencies), but forced to compile scope
+            // - Explicitly defined fixture dependencies
+            Set<Artifact> fixtureCompilationArtifacts = new LinkedHashSet<>();
+
+            // Add the main project's classes as a dependency
+            Artifact mainArtifact = new DefaultArtifact(
+                project.getGroupId(), project.getArtifactId(),
+                VersionRange.createFromVersion(project.getVersion()),
+                "compile", "jar", null, artifactHandlerManager.getArtifactHandler("jar")
+            );
+            mainArtifact.setFile(new File(originalOutputDirectory));
+            mainArtifact.setResolved(true);
+            fixtureCompilationArtifacts.add(mainArtifact);
+
+            // Add all original artifacts, forced to compile scope so the 'compile' goal uses them
+            for (Artifact art : originalArtifacts) {
+                Artifact copy = new DefaultArtifact(
+                    art.getGroupId(), art.getArtifactId(), art.getVersionRange(),
+                    "compile", art.getType(), art.getClassifier(), art.getArtifactHandler()
+                );
+                copy.setFile(art.getFile());
+                copy.setResolved(art.isResolved());
+                fixtureCompilationArtifacts.add(copy);
+            }
+
+            // Resolve and add custom fixture dependencies
+            List<org.eclipse.aether.artifact.Artifact> extraArtifacts = resolveFixtureArtifacts();
+            for (org.eclipse.aether.artifact.Artifact aetherArt : extraArtifacts) {
+                if (aetherArt.getFile() != null) {
+                    Artifact mavenArt = new DefaultArtifact(
+                        aetherArt.getGroupId(), aetherArt.getArtifactId(),
+                        VersionRange.createFromVersion(aetherArt.getVersion()),
+                        "compile", aetherArt.getExtension(), aetherArt.getClassifier(),
+                        artifactHandlerManager.getArtifactHandler(aetherArt.getExtension())
+                    );
+                    mavenArt.setFile(aetherArt.getFile());
+                    mavenArt.setResolved(true);
+                    fixtureCompilationArtifacts.add(mavenArt);
+                }
+            }
+            project.setArtifacts(fixtureCompilationArtifacts);
+
             // 4. Prepare the configuration DOM for the compiler plugin
-            Xpp3Dom pomConfig = (Xpp3Dom) compilerPlugin.getConfiguration();
             Xpp3Dom configuration = new Xpp3Dom("configuration");
+            Xpp3Dom pomConfig = (Xpp3Dom) compilerPlugin.getConfiguration();
             if (pomConfig != null) {
-                // Clone existing configuration except for the parts we're overriding
                 for (Xpp3Dom child : pomConfig.getChildren()) {
-                    if (!"compileSourceRoots".equals(child.getName()) &&
-                        !"outputDirectory".equals(child.getName()) &&
-                        !"classpathElements".equals(child.getName())) {
+                    String name = child.getName();
+                    // Do not override source roots or output directories that we manage via project state
+                    if (!"compileSourceRoots".equals(name) && !"outputDirectory".equals(name) && !"classpathElements".equals(name)) {
                         configuration.addChild(new Xpp3Dom(child));
                     }
                 }
             }
 
-            // Override outputDirectory
+            // Force outputDirectory and ensure skip is false
             setConfigurationValue(configuration, "outputDirectory", fixturesOutputDirectory.getAbsolutePath());
+            setConfigurationValue(configuration, "skip", "false");
 
-            // Pass the specialized classpath via configuration
-            Xpp3Dom classpathElementsDom = new Xpp3Dom("classpathElements");
-            List<String> compilationClasspath = new ArrayList<>();
-            compilationClasspath.add(originalOutputDirectory);
-            compilationClasspath.addAll(project.getTestClasspathElements());
-            compilationClasspath.addAll(fixtureDepPaths);
-            compilationClasspath.stream().distinct().forEach(element -> {
-                Xpp3Dom el = new Xpp3Dom("element");
-                el.setValue(element);
-                classpathElementsDom.addChild(el);
-            });
-            configuration.addChild(classpathElementsDom);
-
-            // Set source roots in configuration as well
-            Xpp3Dom sourceRootsDom = new Xpp3Dom("compileSourceRoots");
-            Xpp3Dom root = new Xpp3Dom("compileSourceRoot");
-            root.setValue(fixturesSourceDirectory.getAbsolutePath());
-            sourceRootsDom.addChild(root);
-            configuration.addChild(sourceRootsDom);
-
-            // 5. Execute the compiler:compile goal
+            // 5. Execute the compiler goal
             MojoExecution execution = new MojoExecution(mojoDescriptor, configuration);
             pluginManager.executeMojo(session, execution);
 
         } catch (Exception e) {
-            throw new MojoExecutionException("Failed to execute maven-compiler-plugin:compile", e);
+            throw new MojoExecutionException("Failed to execute maven-compiler-plugin via BuildPluginManager", e);
         } finally {
             // 6. Restore original project state
             project.getCompileSourceRoots().clear();
@@ -230,6 +259,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                 project.addCompileSourceRoot(root);
             }
             project.getBuild().setOutputDirectory(originalOutputDirectory);
+            project.setArtifacts(originalArtifacts);
         }
 
         // 7. Copy compiled classes to package output directory for packaging
@@ -243,11 +273,6 @@ public class CompileFixturesMojo extends AbstractMojo {
             config.addChild(child);
         }
         child.setValue(value);
-    }
-
-    private void executeMojo(Plugin plugin, String goal, Xpp3Dom configuration) throws MojoExecutionException {
-        // This method is now partially replaced by inline logic in compileSources to handle
-        // descriptor loading correctly as per Maven 3 API.
     }
 
     private void processResources() throws MojoExecutionException {
@@ -291,15 +316,22 @@ public class CompileFixturesMojo extends AbstractMojo {
         }
     }
 
-    private List<String> resolveFixtureDependencies() throws MojoExecutionException {
-        List<String> resolvedPaths = new ArrayList<>();
+    private List<String> resolveFixtureDependencyPaths() throws MojoExecutionException {
+        return resolveFixtureArtifacts().stream()
+                .filter(a -> a.getFile() != null)
+                .map(a -> a.getFile().getAbsolutePath())
+                .collect(Collectors.toList());
+    }
+
+    private List<org.eclipse.aether.artifact.Artifact> resolveFixtureArtifacts() throws MojoExecutionException {
+        List<org.eclipse.aether.artifact.Artifact> resolvedArtifacts = new ArrayList<>();
         
         if (fixtureDependencies == null || fixtureDependencies.isEmpty()) {
-            return resolvedPaths;
+            return resolvedArtifacts;
         }
 
         for (Dependency dep : fixtureDependencies) {
-            Artifact artifact = new DefaultArtifact(
+            org.eclipse.aether.artifact.Artifact artifact = new org.eclipse.aether.artifact.DefaultArtifact(
                     dep.getGroupId(),
                     dep.getArtifactId(),
                     dep.getClassifier(),
@@ -311,24 +343,21 @@ public class CompileFixturesMojo extends AbstractMojo {
             collectRequest.setRoot(new org.eclipse.aether.graph.Dependency(artifact, JavaScopes.COMPILE));
             collectRequest.setRepositories(remoteRepositories);
 
-            DependencyFilter classpathFlter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE);
-            DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFlter);
+            DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE);
+            DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFilter);
 
             try {
                 DependencyResult dependencyResult = repoSystem.resolveDependencies(repoSession, dependencyRequest);
-                for (org.eclipse.aether.graph.DependencyNode node : dependencyResult.getRoot().getChildren()) {
-                     if (node.getArtifact() != null && node.getArtifact().getFile() != null) {
-                         resolvedPaths.add(node.getArtifact().getFile().getAbsolutePath());
-                     }
-                }
-                if (dependencyResult.getRoot() != null && dependencyResult.getRoot().getArtifact() != null && dependencyResult.getRoot().getArtifact().getFile() != null) {
-                    resolvedPaths.add(dependencyResult.getRoot().getArtifact().getFile().getAbsolutePath());
+                for (org.eclipse.aether.resolution.ArtifactResult ar : dependencyResult.getArtifactResults()) {
+                    if (ar.getArtifact() != null) {
+                        resolvedArtifacts.add(ar.getArtifact());
+                    }
                 }
             } catch (DependencyResolutionException e) {
-                getLog().warn("Failed to resolve fixture dependency: " + artifact + ". It might not have a file available.");
+                getLog().warn("Failed to resolve fixture dependency: " + artifact);
             }
         }
-        return resolvedPaths;
+        return resolvedArtifacts;
     }
 
     private void generateSyntheticPom() throws MojoExecutionException {

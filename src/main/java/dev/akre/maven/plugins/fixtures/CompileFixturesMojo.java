@@ -129,11 +129,6 @@ public class CompileFixturesMojo extends AbstractMojo {
                 }
             }
 
-            // Add the fixtures output directory itself to the test classpath
-            if (!project.getTestClasspathElements().contains(fixturesOutputDirectory.getAbsolutePath())) {
-                project.getTestClasspathElements().add(fixturesOutputDirectory.getAbsolutePath());
-            }
-
             getLog().debug("Added fixture dependencies to Maven test model.");
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to inject fixtures into test classpath", e);

@@ -46,8 +46,9 @@ public class PackageFixturesMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException {
+        getLog().info("PackageFixturesMojo executing. Looking for fixtures in: " + fixturesOutputDirectory.getAbsolutePath());
         if (!fixturesOutputDirectory.exists() || !fixturesOutputDirectory.isDirectory()) {
-            getLog().info("No test fixtures found to package. Skipping.");
+            getLog().info("No test fixtures found to package at " + fixturesOutputDirectory.getAbsolutePath() + ". Skipping.");
             return;
         }
 

@@ -62,7 +62,6 @@ public class TestFixturesWorkspaceReaderTest {
     @Test
     public void testFindArtifactWithNullSession() {
         TestFixturesWorkspaceReader readerWithNullSession = new TestFixturesWorkspaceReader();
-        when(artifact.getArtifactId()).thenReturn("my-artifact-test-fixtures");
         assertNull(readerWithNullSession.findArtifact(artifact));
     }
 
@@ -122,10 +121,10 @@ public class TestFixturesWorkspaceReaderTest {
     @Test
     public void testFindArtifactNoMatch() {
         reader.init(session);
-        when(artifact.getGroupId()).thenReturn("other.group");
-        when(artifact.getArtifactId()).thenReturn("other-artifact");
+        lenient().when(artifact.getGroupId()).thenReturn("other.group");
+        lenient().when(artifact.getArtifactId()).thenReturn("other-artifact");
         // For fallback logic
-        when(artifact.getVersion()).thenReturn("1.0.0");
+        lenient().when(artifact.getVersion()).thenReturn("1.0.0");
 
         assertNull(reader.findArtifact(artifact));
     }

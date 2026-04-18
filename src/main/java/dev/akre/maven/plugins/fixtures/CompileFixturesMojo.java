@@ -31,6 +31,7 @@ import javax.tools.ToolProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -211,7 +212,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                     Files.createDirectories(destPackage.getParent());
                     Files.copy(source, destPackage, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new UncheckedIOException(e);
                 }
             });
         } catch (Exception e) {
@@ -232,7 +233,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                         Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
                     }
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new UncheckedIOException(e);
                 }
             });
         } catch (Exception e) {

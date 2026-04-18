@@ -1,0 +1,29 @@
+name: Sync Main to Develop
+
+on:
+  push:
+    branches:
+      - main  # Triggers the action whenever code is pushed to main
+
+jobs:
+  sync-branch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Necessary to push changes back to the repository
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetches all history for all branches so merge works properly
+
+      - name: Set up Git User
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "actions@github.com"
+
+      - name: Merge main into develop
+        run: |
+          git checkout develop
+          git merge origin/main --no-ff -m "chore: sync develop with main"
+          git push origin develop

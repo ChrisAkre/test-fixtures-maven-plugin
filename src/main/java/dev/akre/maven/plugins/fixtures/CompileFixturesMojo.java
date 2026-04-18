@@ -31,11 +31,15 @@ import javax.tools.ToolProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -129,12 +133,10 @@ public class CompileFixturesMojo extends AbstractMojo {
             }
             
             // Also explicitly resolve and add them to test classpath elements just in case
-            List<String> resolvedDeps = resolveFixtureDependencies();
-            for (String depPath : resolvedDeps) {
-                if (!project.getTestClasspathElements().contains(depPath)) {
-                    project.getTestClasspathElements().add(depPath);
-                }
-            }
+            resolveFixtureDependencies().stream()
+                .distinct()
+                .filter(Predicate.not(new HashSet<>(project.getTestClasspathElements())::contains))
+                .forEach(project.getTestClasspathElements()::add);
 
             getLog().debug("Added fixture dependencies to Maven test model.");
         } catch (Exception e) {
@@ -211,7 +213,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                     Files.createDirectories(destPackage.getParent());
                     Files.copy(source, destPackage, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new UncheckedIOException(e);
                 }
             });
         } catch (Exception e) {
@@ -232,7 +234,7 @@ public class CompileFixturesMojo extends AbstractMojo {
                         Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
                     }
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new UncheckedIOException(e);
                 }
             });
         } catch (Exception e) {

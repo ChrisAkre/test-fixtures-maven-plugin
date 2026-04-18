@@ -35,6 +35,11 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
             return null;
         }
 
+        // NOTE: The O(N) loop here is intentional. In a typical build, this is only called
+        // a handful of times, making the performance impact of a linear scan negligible.
+        // Maintaining a Map-based cache would add unnecessary complexity and thread-safety
+        // overhead without measurable benefits.
+
         // 1. Handle our custom test-fixtures artifacts
         if (artifact.getArtifactId() != null && artifact.getArtifactId().endsWith("-test-fixtures")) {
             String baseArtifactId = artifact.getArtifactId().substring(0, artifact.getArtifactId().length() - "-test-fixtures".length());

@@ -25,5 +25,5 @@ jobs:
       - name: Merge main into develop
         run: |
           git checkout develop
-          git merge origin/main --no-ff -m "chore: sync develop with main"
+          git merge -X theirs origin/main --no-ff -m "chore: sync develop with main"
           git push origin develop

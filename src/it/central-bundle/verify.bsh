@@ -1,0 +1,63 @@
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
+File stagingDir = new File(basedir, "target/central-staging/dev/akre/it/central-bundle-it-test-fixtures/1.0.0");
+if (!stagingDir.exists() || !stagingDir.isDirectory()) {
+    System.err.println("Staging directory does not exist: " + stagingDir);
+    return false;
+}
+
+String[] expectedFiles = new String[] {
+    "central-bundle-it-test-fixtures-1.0.0.jar",
+    "central-bundle-it-test-fixtures-1.0.0.pom",
+    "central-bundle-it-test-fixtures-1.0.0-sources.jar",
+    "central-bundle-it-test-fixtures-1.0.0-javadoc.jar"
+};
+
+for (String expectedFile : expectedFiles) {
+    File f = new File(stagingDir, expectedFile);
+    if (!f.exists()) {
+        System.err.println("Expected file does not exist: " + f);
+        return false;
+    }
+}
+
+// Verify POM contents
+File pomFile = new File(stagingDir, "central-bundle-it-test-fixtures-1.0.0.pom");
+String pomContent = new String(Files.readAllBytes(pomFile.toPath()), "UTF-8");
+
+if (!pomContent.contains("<name>Test Fixtures for Central Bundle IT</name>")) {
+    System.err.println("POM does not contain expected <name>");
+    return false;
+}
+
+if (!pomContent.contains("<description>Test utilities and fixtures for Integration Test for Central Bundle Fixtures</description>")) {
+    System.err.println("POM does not contain expected <description>");
+    return false;
+}
+
+if (!pomContent.contains("<url>https://example.com</url>")) {
+    System.err.println("POM does not contain expected <url>");
+    return false;
+}
+
+if (!pomContent.contains("<name>MIT License</name>")) {
+    System.err.println("POM does not contain expected license");
+    return false;
+}
+
+if (!pomContent.contains("<id>akre</id>")) {
+    System.err.println("POM does not contain expected developer");
+    return false;
+}
+
+if (!pomContent.contains("<url>https://example.com/repo</url>")) {
+    System.err.println("POM does not contain expected scm url");
+    return false;
+}
+
+System.out.println("Integration test passed.");
+return true;

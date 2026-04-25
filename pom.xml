@@ -113,6 +113,13 @@
             <version>4.2.5</version>
         </dependency>
 
+        <!-- Mojo Executor -->
+        <dependency>
+            <groupId>org.twdata.maven</groupId>
+            <artifactId>mojo-executor</artifactId>
+            <version>2.4.1</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -213,9 +220,34 @@
     </build>
     <profiles>
         <profile>
-            <id>sonatype</id>
+            <id>release</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>com.google.code.maven-replacer-plugin</groupId>
+                        <artifactId>replacer</artifactId>
+                        <version>1.5.3</version>
+                        <executions>
+                            <execution>
+                                <id>update-readme-version</id>
+                                <phase>process-resources</phase>
+                                <goals>
+                                    <goal>replace</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <inherited>false</inherited>
+                        <configuration>
+                            <file>${project.basedir}/README.md</file>
+                            <replacements>
+                                <replacement>
+                                    <token><![CDATA[(<artifactId>${project.artifactId}</artifactId>\s*<version>).*?(</version>)]]></token>
+                                    <value><![CDATA[$1${project.version}$2]]></value>
+                                </replacement>
+                            </replacements>
+                        </configuration>
+                    </plugin>
+
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>

@@ -1,0 +1,55 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>dev.akre.it</groupId>
+  <artifactId>central-bundle-it</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>Central Bundle IT</name>
+  <description>Integration Test for Central Bundle Fixtures</description>
+  <url>https://example.com</url>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>http://www.opensource.org/licenses/mit-license.php</url>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>akre</id>
+      <name>Chris Akre</name>
+      <email>chris@example.com</email>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:git://example.com/repo.git</connection>
+    <developerConnection>scm:git:ssh://example.com/repo.git</developerConnection>
+    <url>https://example.com/repo</url>
+  </scm>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>@project.groupId@</groupId>
+        <artifactId>@project.artifactId@</artifactId>
+        <version>@project.version@</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>compile-fixtures</goal>
+              <goal>package-fixtures</goal>
+              <goal>central-bundle-fixtures</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <fixtureNameTemplate>Test Fixtures for @name@</fixtureNameTemplate>
+          <fixtureDescriptionTemplate>Test utilities and fixtures for @description@</fixtureDescriptionTemplate>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

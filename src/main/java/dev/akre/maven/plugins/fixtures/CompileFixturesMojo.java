@@ -75,6 +75,12 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/${project.artifactId}-test-fixtures-${project.version}.pom")
     private File fixturesPom;
 
+    @Parameter(defaultValue = "Test Fixtures for @name@")
+    private String fixtureNameTemplate;
+
+    @Parameter(defaultValue = "Test utilities and fixtures for @description@")
+    private String fixtureDescriptionTemplate;
+
     @Parameter
     private List<Dependency> fixtureDependencies = new ArrayList<>();
 
@@ -319,7 +325,25 @@ public class CompileFixturesMojo extends AbstractMojo {
         model.setArtifactId(project.getArtifactId() + "-test-fixtures");
         model.setVersion(project.getVersion());
         model.setPackaging("jar");
-        model.setDescription("Test fixtures for " + project.getArtifactId());
+
+        String name = project.getName() != null ? project.getName() : project.getArtifactId();
+        model.setName(fixtureNameTemplate.replace("@name@", name));
+
+        String description = project.getDescription() != null ? project.getDescription() : "";
+        model.setDescription(fixtureDescriptionTemplate.replace("@description@", description));
+
+        if (project.getModel().getUrl() != null) {
+            model.setUrl(project.getModel().getUrl());
+        }
+        if (project.getModel().getLicenses() != null) {
+            model.setLicenses(new ArrayList<>(project.getModel().getLicenses()));
+        }
+        if (project.getModel().getDevelopers() != null) {
+            model.setDevelopers(new ArrayList<>(project.getModel().getDevelopers()));
+        }
+        if (project.getModel().getScm() != null) {
+            model.setScm(project.getModel().getScm().clone());
+        }
 
         // The test fixtures depend on the main project classes
         Dependency mainProjectDep = new Dependency();

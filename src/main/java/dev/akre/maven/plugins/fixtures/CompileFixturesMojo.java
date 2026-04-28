@@ -385,6 +385,10 @@ public class CompileFixturesMojo extends AbstractMojo {
         };
 
         for (String artifactId : targetPlugins) {
+            if ("test-fixtures-maven-plugin".equals(artifactId)) {
+                continue;
+            }
+
             Plugin userPlugin = project.getPlugin("org.apache.maven.plugins:" + artifactId);
 
             if (userPlugin == null) {

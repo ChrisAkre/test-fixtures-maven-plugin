@@ -327,19 +327,27 @@ public class CompileFixturesMojo extends AbstractMojo {
         model.setPackaging("jar");
 
         String name = project.getName() != null ? project.getName() : project.getArtifactId();
-        model.setName(fixtureNameTemplate.replace("@name@", name));
+        if (fixtureNameTemplate != null) {
+            model.setName(fixtureNameTemplate.replace("@name@", name));
+        }
 
         String description = project.getDescription() != null ? project.getDescription() : "";
-        model.setDescription(fixtureDescriptionTemplate.replace("@description@", description));
+        if (fixtureDescriptionTemplate != null) {
+            model.setDescription(fixtureDescriptionTemplate.replace("@description@", description));
+        }
 
         if (project.getModel().getUrl() != null) {
             model.setUrl(project.getModel().getUrl());
         }
         if (project.getModel().getLicenses() != null) {
-            model.setLicenses(new ArrayList<>(project.getModel().getLicenses()));
+            model.setLicenses(project.getModel().getLicenses().stream()
+                    .map(org.apache.maven.model.License::clone)
+                    .collect(Collectors.toList()));
         }
         if (project.getModel().getDevelopers() != null) {
-            model.setDevelopers(new ArrayList<>(project.getModel().getDevelopers()));
+            model.setDevelopers(project.getModel().getDevelopers().stream()
+                    .map(org.apache.maven.model.Developer::clone)
+                    .collect(Collectors.toList()));
         }
         if (project.getModel().getScm() != null) {
             model.setScm(project.getModel().getScm().clone());
@@ -358,6 +366,59 @@ public class CompileFixturesMojo extends AbstractMojo {
                 model.addDependency(dep);
             }
         }
+
+        org.apache.maven.model.Build build = new org.apache.maven.model.Build();
+        Path pomParent = fixturesPom.getParentFile().toPath();
+
+        String relSource = pomParent.relativize(fixturesSourceDirectory.toPath()).toString().replace('\\', '/');
+        build.setSourceDirectory(relSource);
+
+        String relOutput = pomParent.relativize(packageOutputDirectory.toPath()).toString().replace('\\', '/');
+        build.setOutputDirectory(relOutput);
+
+        String[] targetPlugins = {
+            "maven-compiler-plugin",
+            "maven-source-plugin",
+            "maven-javadoc-plugin",
+            "maven-gpg-plugin",
+            "central-publishing-maven-plugin"
+        };
+
+        for (String artifactId : targetPlugins) {
+            if ("test-fixtures-maven-plugin".equals(artifactId)) {
+                continue;
+            }
+
+            Plugin userPlugin = project.getPlugin("org.apache.maven.plugins:" + artifactId);
+
+            if (userPlugin == null) {
+                userPlugin = project.getPlugin("org.sonatype.central:" + artifactId);
+            }
+
+            if (userPlugin != null) {
+                Plugin clonedPlugin = userPlugin.clone();
+                if ("maven-compiler-plugin".equals(artifactId)) {
+                    Object config = clonedPlugin.getConfiguration();
+                    Xpp3Dom dom;
+                    if (config instanceof Xpp3Dom) {
+                        dom = (Xpp3Dom) config;
+                    } else {
+                        dom = new Xpp3Dom("configuration");
+                        clonedPlugin.setConfiguration(dom);
+                    }
+
+                    Xpp3Dom skipMainDom = dom.getChild("skipMain");
+                    if (skipMainDom == null) {
+                        skipMainDom = new Xpp3Dom("skipMain");
+                        dom.addChild(skipMainDom);
+                    }
+                    skipMainDom.setValue("true");
+                }
+                build.addPlugin(clonedPlugin);
+            }
+        }
+
+        model.setBuild(build);
 
         try (FileOutputStream fos = new FileOutputStream(fixturesPom)) {
             new MavenXpp3Writer().write(fos, model);

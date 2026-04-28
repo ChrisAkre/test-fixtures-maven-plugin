@@ -59,5 +59,26 @@ if (!pomContent.contains("<url>https://example.com/repo</url>")) {
     return false;
 }
 
+// Verify that the standalone POM generated artifacts in its target directory
+File standaloneTargetDir = new File(basedir, "target/target");
+if (!standaloneTargetDir.exists() || !standaloneTargetDir.isDirectory()) {
+    System.err.println("Standalone target directory does not exist: " + standaloneTargetDir);
+    return false;
+}
+
+String[] standaloneExpectedFiles = new String[] {
+    "central-bundle-it-test-fixtures-1.0.0.jar",
+    "central-bundle-it-test-fixtures-1.0.0-sources.jar",
+    "central-bundle-it-test-fixtures-1.0.0-javadoc.jar"
+};
+
+for (String expectedFile : standaloneExpectedFiles) {
+    File f = new File(standaloneTargetDir, expectedFile);
+    if (!f.exists()) {
+        System.err.println("Expected standalone file does not exist: " + f);
+        return false;
+    }
+}
+
 System.out.println("Integration test passed.");
 return true;

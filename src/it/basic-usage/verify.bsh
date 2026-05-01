@@ -58,3 +58,20 @@ if ( pomContent.contains("<scope>test</scope>") )
 {
     throw new Exception("Synthetic POM shouldn't have test scope dependencies since fixtures should expose them as compile");
 }
+
+File copiedPomFile = new File( basedir, "test-fixtures/pom.xml" );
+if ( !copiedPomFile.isFile() )
+{
+    throw new java.io.FileNotFoundException( "Could not find copied POM: " + copiedPomFile );
+}
+
+String copiedPomContent = new Scanner(copiedPomFile).useDelimiter("\\Z").next();
+if ( !copiedPomContent.contains("<artifactId>basic-usage-test-fixtures</artifactId>") )
+{
+    throw new Exception("Copied POM missing artifactId");
+}
+
+if ( !copiedPomContent.contains("<description>Test utilities and fixtures for </description>") )
+{
+    throw new Exception("Copied POM missing description");
+}

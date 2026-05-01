@@ -1,6 +1,9 @@
 package dev.akre.maven.plugins.fixtures;
 
+import org.apache.maven.model.Build;
 import org.apache.maven.model.Dependency;
+import org.apache.maven.model.Developer;
+import org.apache.maven.model.License;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.model.Plugin;
@@ -18,6 +21,7 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.graph.DependencyFilter;
+import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.DependencyRequest;
 import org.eclipse.aether.resolution.DependencyResolutionException;
@@ -292,7 +296,7 @@ public class CompileFixturesMojo extends AbstractMojo {
 
             try {
                 DependencyResult dependencyResult = repoSystem.resolveDependencies(repoSession, dependencyRequest);
-                for (org.eclipse.aether.graph.DependencyNode node : dependencyResult.getRoot().getChildren()) {
+                for (DependencyNode node : dependencyResult.getRoot().getChildren()) {
                      if (node.getArtifact() != null && node.getArtifact().getFile() != null) {
                          resolvedPaths.add(node.getArtifact().getFile().getAbsolutePath());
                      }
@@ -341,16 +345,19 @@ public class CompileFixturesMojo extends AbstractMojo {
         }
         if (project.getModel().getLicenses() != null) {
             model.setLicenses(project.getModel().getLicenses().stream()
-                    .map(org.apache.maven.model.License::clone)
+                    .map(License::clone)
                     .collect(Collectors.toList()));
         }
         if (project.getModel().getDevelopers() != null) {
             model.setDevelopers(project.getModel().getDevelopers().stream()
-                    .map(org.apache.maven.model.Developer::clone)
+                    .map(Developer::clone)
                     .collect(Collectors.toList()));
         }
         if (project.getModel().getScm() != null) {
             model.setScm(project.getModel().getScm().clone());
+        }
+        if (project.getModel().getRepositories() != null) {
+            model.setRepositories(new ArrayList<>(project.getModel().getRepositories()));
         }
 
         // The test fixtures depend on the main project classes
@@ -367,7 +374,7 @@ public class CompileFixturesMojo extends AbstractMojo {
             }
         }
 
-        org.apache.maven.model.Build build = new org.apache.maven.model.Build();
+        Build build = new Build();
         Path pomParent = fixturesPom.getParentFile().toPath();
 
         String relSource = pomParent.relativize(fixturesSourceDirectory.toPath()).toString().replace('\\', '/');
@@ -385,9 +392,6 @@ public class CompileFixturesMojo extends AbstractMojo {
         };
 
         for (String artifactId : targetPlugins) {
-            if ("test-fixtures-maven-plugin".equals(artifactId)) {
-                continue;
-            }
 
             Plugin userPlugin = project.getPlugin("org.apache.maven.plugins:" + artifactId);
 

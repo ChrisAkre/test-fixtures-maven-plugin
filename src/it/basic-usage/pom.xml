@@ -38,6 +38,7 @@
                 <version>@project.version@</version>
                 <extensions>true</extensions>
                 <configuration>
+                    <fixturesArtifactId>custom-fixtures</fixturesArtifactId>
                     <fixtureDependencies>
                         <dependency>
                             <groupId>org.assertj</groupId>

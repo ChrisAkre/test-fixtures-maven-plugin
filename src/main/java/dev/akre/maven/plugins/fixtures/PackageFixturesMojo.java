@@ -32,6 +32,9 @@ public class PackageFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes")
     private File fixturesOutputDirectory;
 
+    @Parameter(defaultValue = "${project.artifactId}-test-fixtures")
+    private String fixturesArtifactId;
+
     @Parameter(defaultValue = "${project.build.directory}/${project.artifactId}-test-fixtures-${project.version}.jar")
     private File fixturesJar;
 
@@ -44,11 +47,30 @@ public class PackageFixturesMojo extends AbstractMojo {
     @Inject
     private JarArchiver jarArchiver;
 
+    @Parameter(property = "package-fixtures.skip", defaultValue = "false")
+    private boolean skip;
+
     @Override
     public void execute() throws MojoExecutionException {
+        if (skip) {
+            getLog().info("Skipping package-fixtures goal as configured.");
+            return;
+        }
+
         if (!fixturesOutputDirectory.exists() || !fixturesOutputDirectory.isDirectory()) {
             getLog().info("No test fixtures found to package. Skipping.");
             return;
+        }
+
+        // If fixturesArtifactId is customized, update the file paths if they still point to the default
+        String defaultPrefix = project.getArtifactId() + "-test-fixtures-" + project.getVersion();
+        String customPrefix = fixturesArtifactId + "-" + project.getVersion();
+
+        if (fixturesJar.getName().startsWith(defaultPrefix) && !fixturesArtifactId.equals(project.getArtifactId() + "-test-fixtures")) {
+            fixturesJar = new File(fixturesJar.getParentFile(), fixturesJar.getName().replace(defaultPrefix, customPrefix));
+        }
+        if (fixturesPom.getName().startsWith(defaultPrefix) && !fixturesArtifactId.equals(project.getArtifactId() + "-test-fixtures")) {
+            fixturesPom = new File(fixturesPom.getParentFile(), fixturesPom.getName().replace(defaultPrefix, customPrefix));
         }
 
         getLog().info("Packaging test fixtures to " + fixturesJar.getAbsolutePath());

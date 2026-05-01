@@ -7,7 +7,7 @@ import java.util.Scanner;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
-File jarFile = new File( basedir, "target/basic-usage-test-fixtures-1.0.0-SNAPSHOT.jar" );
+File jarFile = new File( basedir, "target/custom-fixtures-1.0.0-SNAPSHOT.jar" );
 if ( !jarFile.isFile() )
 {
     throw new java.io.FileNotFoundException( "Could not find generated JAR: " + jarFile );
@@ -33,7 +33,7 @@ while ( (entry = jis.getNextJarEntry()) != null )
 }
 jis.close();
 
-File pomFile = new File( basedir, "target/basic-usage-test-fixtures-1.0.0-SNAPSHOT.pom" );
+File pomFile = new File( basedir, "target/custom-fixtures-1.0.0-SNAPSHOT.pom" );
 if ( !pomFile.isFile() )
 {
     throw new java.io.FileNotFoundException( "Could not find generated POM: " + pomFile );
@@ -41,6 +41,12 @@ if ( !pomFile.isFile() )
 
 // Validate the synthetic POM contents
 String pomContent = new Scanner(pomFile).useDelimiter("\\Z").next();
+
+// Check for the custom artifactId
+if ( !pomContent.contains("<artifactId>custom-fixtures</artifactId>") )
+{
+    throw new Exception("Synthetic POM missing custom artifactId");
+}
 
 // Check for the main artifact dependency
 if ( !pomContent.contains("<artifactId>basic-usage</artifactId>") )
@@ -66,7 +72,7 @@ if ( !copiedPomFile.isFile() )
 }
 
 String copiedPomContent = new Scanner(copiedPomFile).useDelimiter("\\Z").next();
-if ( !copiedPomContent.contains("<artifactId>basic-usage-test-fixtures</artifactId>") )
+if ( !copiedPomContent.contains("<artifactId>custom-fixtures</artifactId>") )
 {
     throw new Exception("Copied POM missing artifactId");
 }

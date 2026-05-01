@@ -32,11 +32,22 @@ public class DeployFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     private org.apache.maven.execution.MavenSession session;
 
+    @Parameter(defaultValue = "${project.artifactId}-test-fixtures")
+    private String fixturesArtifactId;
+
     @Component
     private ArtifactDeployer deployer;
 
+    @Parameter(property = "deploy-fixtures.skip", defaultValue = "false")
+    private boolean skip;
+
     @Override
     public void execute() throws MojoExecutionException {
+        if (skip) {
+            getLog().info("Skipping deploy-fixtures goal as configured.");
+            return;
+        }
+
         String jarPath = (String) project.getContextValue("fixturesJar");
         String pomPath = (String) project.getContextValue("fixturesPom");
 
@@ -68,7 +79,7 @@ public class DeployFixturesMojo extends AbstractMojo {
 
         Artifact jarArtifact = new DefaultArtifact(
                 project.getGroupId(),
-                project.getArtifactId() + "-test-fixtures",
+                fixturesArtifactId,
                 project.getVersion(),
                 "compile",
                 "jar",
@@ -79,7 +90,7 @@ public class DeployFixturesMojo extends AbstractMojo {
 
         Artifact pomArtifact = new DefaultArtifact(
                 project.getGroupId(),
-                project.getArtifactId() + "-test-fixtures",
+                fixturesArtifactId,
                 project.getVersion(),
                 "compile",
                 "pom",

@@ -76,6 +76,9 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes", readonly = true)
     private File packageOutputDirectory;
 
+    @Parameter(defaultValue = "${project.artifactId}-test-fixtures")
+    private String fixturesArtifactId;
+
     @Parameter(defaultValue = "${project.build.directory}/${project.artifactId}-test-fixtures-${project.version}.pom")
     private File fixturesPom;
 
@@ -97,8 +100,16 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     private List<RemoteRepository> remoteRepositories;
 
+    @Parameter(property = "compile-fixtures.skip", defaultValue = "false")
+    private boolean skip;
+
     @Override
     public void execute() throws MojoExecutionException {
+        if (skip) {
+            getLog().info("Skipping compile-fixtures goal as configured.");
+            return;
+        }
+
         boolean hasJavaSources = fixturesSourceDirectory.exists() && fixturesSourceDirectory.isDirectory();
         boolean hasResources = fixturesResourcesDirectory.exists() && fixturesResourcesDirectory.isDirectory();
 
@@ -131,6 +142,8 @@ public class CompileFixturesMojo extends AbstractMojo {
                 compileSources(sourceFiles);
             }
         }
+
+        project.setContextValue("fixturesPom", fixturesPom.getAbsolutePath());
 
         // Inject explicit dependencies into the standard Maven test classpath
         try {
@@ -323,10 +336,18 @@ public class CompileFixturesMojo extends AbstractMojo {
     }
 
     private void generateSyntheticPom() throws MojoExecutionException {
+        // If fixturesArtifactId is customized, update the file paths if they still point to the default
+        String defaultPrefix = project.getArtifactId() + "-test-fixtures-" + project.getVersion();
+        String customPrefix = fixturesArtifactId + "-" + project.getVersion();
+
+        if (fixturesPom.getName().startsWith(defaultPrefix) && !fixturesArtifactId.equals(project.getArtifactId() + "-test-fixtures")) {
+            fixturesPom = new File(fixturesPom.getParentFile(), fixturesPom.getName().replace(defaultPrefix, customPrefix));
+        }
+
         Model model = new Model();
         model.setModelVersion("4.0.0");
         model.setGroupId(project.getGroupId());
-        model.setArtifactId(project.getArtifactId() + "-test-fixtures");
+        model.setArtifactId(fixturesArtifactId);
         model.setVersion(project.getVersion());
         model.setPackaging("jar");
 

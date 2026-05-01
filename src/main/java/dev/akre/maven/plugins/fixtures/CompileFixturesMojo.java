@@ -359,6 +359,9 @@ public class CompileFixturesMojo extends AbstractMojo {
         if (project.getModel().getRepositories() != null) {
             model.setRepositories(new ArrayList<>(project.getModel().getRepositories()));
         }
+        if (project.getModel().getDistributionManagement() != null) {
+            model.setDistributionManagement(project.getDistributionManagement().clone());
+        }
 
         // The test fixtures depend on the main project classes
         Dependency mainProjectDep = new Dependency();

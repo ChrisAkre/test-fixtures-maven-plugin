@@ -54,6 +54,15 @@
                         </goals>
                     </execution>
                     <execution>
+                        <id>copy-pom</id>
+                        <goals>
+                            <goal>copy-pom</goal>
+                        </goals>
+                        <configuration>
+                            <copyTarget>${project.basedir}/test-fixtures/pom.xml</copyTarget>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>package-fixtures</id>
                         <goals>
                             <goal>package-fixtures</goal>

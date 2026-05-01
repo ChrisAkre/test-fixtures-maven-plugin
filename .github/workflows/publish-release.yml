@@ -51,6 +51,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_KEY_PASSPHRASE }}
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Sync main back to develop
         run: |

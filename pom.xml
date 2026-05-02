@@ -31,7 +31,7 @@
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.version>3.8.1</maven.version>
-        <maven.plugin.annotations.version>3.6.4</maven.plugin.annotations.version>
+        <maven.plugin.annotations.version>3.12.0</maven.plugin.annotations.version>
         <maven.resolver.version>1.6.3</maven.resolver.version>
     </properties>
 
@@ -148,6 +148,18 @@
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.eclipse.sisu</groupId>
@@ -165,7 +177,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-plugin-plugin</artifactId>
-                <version>3.6.4</version>
+                <version>3.12.0</version>
                 <executions>
                     <execution>
                         <id>default-descriptor</id>
@@ -178,15 +190,6 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -216,28 +219,66 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.3.1</version>
+                <inherited>false</inherited>
+                <configuration>
+                    <skip>${parent.tasks.skip}</skip>
+                    <tagNameFormat>@{project.version}</tagNameFormat>
+                    <preparationGoals>clean replacer:replace exec:exec@commit-changes verify</preparationGoals>
+                    <arguments>-Ppublish-central -Dparent.tasks.skip=false -DskipTests -Dgpg.loopback=true -Dgpg.passphrase=${GPG_PASSPHRASE}</arguments>
+                    <releaseProfiles>publish-central</releaseProfiles>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
     <profiles>
         <profile>
-            <id>release</id>
+            <id>is-root-project</id>
+            <activation>
+                <file>
+                    <exists>${basedir}/.git</exists>
+                </file>
+            </activation>
+            <properties>
+                <parent.tasks.skip>false</parent.tasks.skip>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>is-submodule</id>
+            <activation>
+                <file>
+                    <missing>${basedir}/.git</missing>
+                </file>
+            </activation>
+            <properties>
+                <parent.tasks.skip>true</parent.tasks.skip>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>publish-central</id>
             <build>
                 <plugins>
                     <plugin>
                         <groupId>com.google.code.maven-replacer-plugin</groupId>
                         <artifactId>replacer</artifactId>
                         <version>1.5.3</version>
+                        <inherited>false</inherited>
                         <executions>
                             <execution>
                                 <id>update-readme-version</id>
-                                <phase>process-resources</phase>
                                 <goals>
                                     <goal>replace</goal>
                                 </goals>
                             </execution>
                         </executions>
-                        <inherited>false</inherited>
                         <configuration>
+                            <skip>${parent.tasks.skip}</skip>
                             <file>${project.basedir}/README.md</file>
                             <replacements>
                                 <replacement>
@@ -247,7 +288,29 @@
                             </replacements>
                         </configuration>
                     </plugin>
-
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>commit-changes</id>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>${parent.tasks.skip}</skip>
+                                    <executable>sh</executable>
+                                    <inheritIo>true</inheritIo>
+                                    <arguments>
+                                        <argument>-c</argument>
+                                        <argument><![CDATA[git add README.md && git commit -m "[maven-release-plugin] update documentation" README.md || true]]></argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
@@ -309,19 +372,21 @@
             </build>
         </profile>
     </profiles>
+
     <scm>
         <connection>scm:git:https://github.com/ChrisAkre/test-fixtures-maven-plugin.git</connection>
         <developerConnection>scm:git:https://github.com/ChrisAkre/test-fixtures-maven-plugin.git</developerConnection>
         <url>https://github.com/ChrisAkre/test-fixtures-maven-plugin</url>
-        <tag>test-fixtures-maven-plugin-1.0.1</tag>
+        <tag>HEAD</tag>
     </scm>
+
     <distributionManagement>
         <repository>
             <id>ossrh</id>
             <url>https://central.sonatype.com/service/local/staging/deploy/maven2/</url>
         </repository>
         <snapshotRepository>
-            <id>github</id>
+            <id>github-snapshots</id>
             <name>GitHub Packages</name>
             <url>https://maven.pkg.github.com/ChrisAkre/test-fixtures-maven-plugin</url>
         </snapshotRepository>

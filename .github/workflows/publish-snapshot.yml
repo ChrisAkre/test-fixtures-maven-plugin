@@ -20,7 +20,7 @@ jobs:
           java-version: '11'
           distribution: 'temurin'
           cache: maven
-          server-id: github # Must match the <id> in your pom.xml distributionManagement
+          server-id: github-snapshots # Must match the <id> in your pom.xml distributionManagement
 
       - name: Build and Deploy
         # Running 'deploy' automatically runs 'verify' first

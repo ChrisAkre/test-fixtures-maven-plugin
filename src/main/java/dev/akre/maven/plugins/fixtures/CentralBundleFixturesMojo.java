@@ -9,13 +9,10 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.MavenProjectHelper;
-import org.codehaus.plexus.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,9 +35,6 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
     @Component
     private BuildPluginManager pluginManager;
 
-    @Component
-    private MavenProjectHelper projectHelper;
-
     @Parameter(defaultValue = "Test Fixtures for @name@")
     private String fixtureNameTemplate;
 
@@ -53,11 +47,22 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes")
     private File fixturesOutputDirectory;
 
+    @Parameter(defaultValue = "${project.artifactId}-test-fixtures")
+    private String fixturesArtifactId;
+
     @Parameter(defaultValue = "${project.build.directory}")
     private File buildDirectory;
 
+    @Parameter(property = "central-bundle-fixtures.skip", defaultValue = "false")
+    private boolean skip;
+
     @Override
     public void execute() throws MojoExecutionException {
+        if (skip) {
+            getLog().info("Skipping central-bundle-fixtures goal as configured.");
+            return;
+        }
+
         // Check if gpg signing was skipped
         boolean skipGpg = Boolean.parseBoolean(session.getUserProperties().getProperty("gpg.skip", "false"));
 
@@ -74,7 +79,7 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
         }
 
         // Paths for the artifacts
-        String artifactPrefix = project.getArtifactId() + "-test-fixtures-" + project.getVersion();
+        String artifactPrefix = fixturesArtifactId + "-" + project.getVersion();
         File jarFile = new File(buildDirectory, artifactPrefix + ".jar");
         File pomFile = new File(buildDirectory, artifactPrefix + ".pom");
         File sourcesJar = new File(buildDirectory, artifactPrefix + "-sources.jar");
@@ -136,14 +141,14 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
 
         MavenProject syntheticProject = new MavenProject();
         syntheticProject.setGroupId(project.getGroupId());
-        syntheticProject.setArtifactId(project.getArtifactId() + "-test-fixtures");
+        syntheticProject.setArtifactId(fixturesArtifactId);
         syntheticProject.setVersion(project.getVersion());
         syntheticProject.setPackaging("jar");
         syntheticProject.setFile(pomFile);
 
         org.apache.maven.artifact.Artifact syntheticArtifact = new org.apache.maven.artifact.DefaultArtifact(
                 project.getGroupId(),
-                project.getArtifactId() + "-test-fixtures",
+                fixturesArtifactId,
                 project.getVersion(),
                 "compile",
                 "jar",
@@ -155,7 +160,7 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
 
         org.apache.maven.artifact.Artifact sourcesArtifact = new org.apache.maven.artifact.DefaultArtifact(
                 project.getGroupId(),
-                project.getArtifactId() + "-test-fixtures",
+                fixturesArtifactId,
                 project.getVersion(),
                 "compile",
                 "jar",
@@ -167,7 +172,7 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
 
         org.apache.maven.artifact.Artifact javadocArtifact = new org.apache.maven.artifact.DefaultArtifact(
                 project.getGroupId(),
-                project.getArtifactId() + "-test-fixtures",
+                fixturesArtifactId,
                 project.getVersion(),
                 "compile",
                 "jar",
@@ -200,7 +205,7 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
         // Destination path: ${centralStagingDirectory}/groupId(slashes)/artifactId/version/
         File destDir = new File(centralStagingDirectory,
             project.getGroupId().replace('.', '/') + "/" +
-            project.getArtifactId() + "-test-fixtures/" +
+            fixturesArtifactId + "/" +
             project.getVersion());
         destDir.mkdirs();
 

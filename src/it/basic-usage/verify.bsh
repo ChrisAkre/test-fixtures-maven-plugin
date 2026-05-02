@@ -77,7 +77,7 @@ if ( !copiedPomContent.contains("<artifactId>custom-fixtures</artifactId>") )
     throw new Exception("Copied POM missing artifactId");
 }
 
-if ( !copiedPomContent.contains("<description>Test utilities and fixtures for </description>") )
+if ( !copiedPomContent.contains("<description>Test utilities and fixtures for</description>") )
 {
     throw new Exception("Copied POM missing description");
 }

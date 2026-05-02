@@ -9,13 +9,10 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.MavenProjectHelper;
-import org.codehaus.plexus.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,9 +34,6 @@ public class CentralBundleFixturesMojo extends AbstractMojo {
 
     @Component
     private BuildPluginManager pluginManager;
-
-    @Component
-    private MavenProjectHelper projectHelper;
 
     @Parameter(defaultValue = "Test Fixtures for @name@")
     private String fixtureNameTemplate;

@@ -1,22 +1,16 @@
 package dev.akre.maven.plugins.fixtures;
 
-import org.apache.maven.model.Model;
-import org.apache.maven.model.Plugin;
-import org.apache.maven.model.PluginExecution;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.codehaus.plexus.util.xml.Xpp3Dom;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Copies the synthetic POM to a target location.
@@ -71,47 +65,9 @@ public class CopyPomMojo extends AbstractMojo {
                     throw new MojoExecutionException("Failed to create parent directories for " + copyTarget.getAbsolutePath());
                 }
             }
-
-            // Parse the POM
-            Model model;
-            try (FileInputStream fis = new FileInputStream(fixturesPom)) {
-                model = new MavenXpp3Reader().read(fis);
-            }
-
-            // Remove skipMain from maven-compiler-plugin
-            if (model.getBuild() != null && model.getBuild().getPlugins() != null) {
-                for (Plugin plugin : model.getBuild().getPlugins()) {
-                    if ("maven-compiler-plugin".equals(plugin.getArtifactId())) {
-                        removeSkipMain(plugin.getConfiguration());
-                        if (plugin.getExecutions() != null) {
-                            for (PluginExecution execution : plugin.getExecutions()) {
-                                removeSkipMain(execution.getConfiguration());
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Write the modified POM
-            try (FileOutputStream fos = new FileOutputStream(copyTarget)) {
-                new MavenXpp3Writer().write(fos, model);
-            }
-
-        } catch (Exception e) {
+            Files.copy(fixturesPom.toPath(), copyTarget.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
             throw new MojoExecutionException("Error copying test fixtures POM", e);
-        }
-    }
-
-    private void removeSkipMain(Object config) {
-        if (config instanceof Xpp3Dom) {
-            Xpp3Dom dom = (Xpp3Dom) config;
-            for (int i = 0; i < dom.getChildCount(); i++) {
-                if ("skipMain".equals(dom.getChild(i).getName())) {
-                    dom.removeChild(i);
-                    // Decrement i to account for the removed element, in case there are multiple
-                    i--;
-                }
-            }
         }
     }
 }

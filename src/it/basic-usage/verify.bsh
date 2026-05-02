@@ -65,6 +65,11 @@ if ( pomContent.contains("<scope>test</scope>") )
     throw new Exception("Synthetic POM shouldn't have test scope dependencies since fixtures should expose them as compile");
 }
 
+if ( pomContent.contains("<skipMain>true</skipMain>") )
+{
+    throw new Exception("Synthetic POM contains skipMain=true, but main compilation should not be skipped");
+}
+
 File copiedPomFile = new File( basedir, "test-fixtures/pom.xml" );
 if ( !copiedPomFile.isFile() )
 {
@@ -77,7 +82,12 @@ if ( !copiedPomContent.contains("<artifactId>custom-fixtures</artifactId>") )
     throw new Exception("Copied POM missing artifactId");
 }
 
-if ( !copiedPomContent.contains("<description>Test utilities and fixtures for</description>") )
+if ( !copiedPomContent.contains("<description>Test utilities and fixtures for </description>") )
 {
     throw new Exception("Copied POM missing description");
+}
+
+if ( copiedPomContent.contains("<skipMain>true</skipMain>") )
+{
+    throw new Exception("Copied POM contains skipMain=true, but main compilation should not be skipped");
 }

@@ -18,7 +18,7 @@ follows:
 <plugin>
     <groupId>dev.akre</groupId>
     <artifactId>test-fixtures-maven-plugin</artifactId>
-    <version>1.0.4-SNAPSHOT</version>
+    <version>1.0.5</version>
     <extensions>true</extensions>
     <configuration>
         <fixturesArtifactId>my-custom-fixtures</fixturesArtifactId>

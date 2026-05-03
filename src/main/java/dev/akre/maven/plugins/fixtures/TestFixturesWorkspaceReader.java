@@ -24,9 +24,21 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
     private final WorkspaceRepository repository = new WorkspaceRepository("test-fixtures");
 
     private MavenSession session;
+    private java.util.Map<String, MavenProject> fixturesArtifactMap = new java.util.HashMap<>();
+    private java.util.Map<String, MavenProject> regularArtifactMap = new java.util.HashMap<>();
 
     public void init(MavenSession session) {
         this.session = session;
+        if (session != null) {
+            for (MavenProject project : session.getProjects()) {
+                Plugin plugin = project.getPlugin(PLUGIN_GROUP_ID + ":" + PLUGIN_ARTIFACT_ID);
+                Xpp3Dom config = (plugin != null && plugin.getConfiguration() instanceof Xpp3Dom) ? (Xpp3Dom) plugin.getConfiguration() : null;
+
+                String fixturesArtifactId = getFixturesArtifactId(project, config);
+                fixturesArtifactMap.put(project.getGroupId() + ":" + fixturesArtifactId, project);
+                regularArtifactMap.put(project.getGroupId() + ":" + project.getArtifactId() + ":" + project.getVersion(), project);
+            }
+        }
     }
 
     @Override
@@ -40,51 +52,54 @@ public class TestFixturesWorkspaceReader implements WorkspaceReader {
             return null;
         }
 
-        for (MavenProject project : session.getProjects()) {
-            if (project.getGroupId().equals(artifact.getGroupId())) {
-                String fixturesArtifactId = getFixturesArtifactId(project);
-                if (artifact.getArtifactId().equals(fixturesArtifactId)) {
-                    if ("jar".equals(artifact.getExtension())) {
-                        return new File(project.getBuild().getDirectory(), "test-fixtures-classes");
-                    } else if ("pom".equals(artifact.getExtension())) {
-                        return new File(project.getBuild().getDirectory(), fixturesArtifactId + "-" + project.getVersion() + ".pom");
-                    }
-                }
+        MavenProject project = fixturesArtifactMap.get(artifact.getGroupId() + ":" + artifact.getArtifactId());
+        if (project != null) {
+            Plugin plugin = project.getPlugin(PLUGIN_GROUP_ID + ":" + PLUGIN_ARTIFACT_ID);
+            Xpp3Dom config = (plugin != null && plugin.getConfiguration() instanceof Xpp3Dom) ? (Xpp3Dom) plugin.getConfiguration() : null;
+
+            if ("jar".equals(artifact.getExtension())) {
+                return getFixturesOutputDirectory(project, config);
+            } else if ("pom".equals(artifact.getExtension())) {
+                return new File(project.getBuild().getDirectory(), artifact.getArtifactId() + "-" + project.getVersion() + ".pom");
             }
         }
 
         // 2. Fallback: Handle regular reactor artifacts if they aren't being resolved for some reason
-        for (MavenProject project : session.getProjects()) {
-            if (project.getGroupId().equals(artifact.getGroupId()) && project.getArtifactId().equals(artifact.getArtifactId()) && project.getVersion().equals(artifact.getVersion())) {
-                 if ("pom".equals(artifact.getExtension())) {
-                     return project.getFile();
-                 } else if ("jar".equals(artifact.getExtension())) {
-                     // If it's the main artifact, return the classes directory if the jar doesn't exist yet
-                     File jar = project.getArtifact().getFile();
-                     if (jar != null && jar.exists()) {
-                         return jar;
-                     }
-                     return new File(project.getBuild().getOutputDirectory());
-                 }
+        project = regularArtifactMap.get(artifact.getGroupId() + ":" + artifact.getArtifactId() + ":" + artifact.getVersion());
+        if (project != null) {
+            if ("pom".equals(artifact.getExtension())) {
+                return project.getFile();
+            } else if ("jar".equals(artifact.getExtension())) {
+                // If it's the main artifact, return the classes directory if the jar doesn't exist yet
+                File jar = project.getArtifact().getFile();
+                if (jar != null && jar.exists()) {
+                    return jar;
+                }
+                return new File(project.getBuild().getOutputDirectory());
             }
         }
 
         return null;
     }
 
-    private String getFixturesArtifactId(MavenProject project) {
-        Plugin plugin = project.getPlugin(PLUGIN_GROUP_ID + ":" + PLUGIN_ARTIFACT_ID);
-        if (plugin != null) {
-            Object config = plugin.getConfiguration();
-            if (config instanceof Xpp3Dom) {
-                Xpp3Dom dom = (Xpp3Dom) config;
-                Xpp3Dom fixturesArtifactIdDom = dom.getChild("fixturesArtifactId");
-                if (fixturesArtifactIdDom != null && fixturesArtifactIdDom.getValue() != null) {
-                    return fixturesArtifactIdDom.getValue();
-                }
+    private String getFixturesArtifactId(MavenProject project, Xpp3Dom config) {
+        if (config != null) {
+            Xpp3Dom dom = config.getChild("fixturesArtifactId");
+            if (dom != null && dom.getValue() != null) {
+                return dom.getValue();
             }
         }
         return project.getArtifactId() + "-test-fixtures";
+    }
+
+    private File getFixturesOutputDirectory(MavenProject project, Xpp3Dom config) {
+        if (config != null) {
+            Xpp3Dom dom = config.getChild("fixturesOutputDirectory");
+            if (dom != null && dom.getValue() != null) {
+                return new File(dom.getValue());
+            }
+        }
+        return new File(project.getBuild().getDirectory(), "test-fixtures-classes");
     }
 
     @Override

@@ -67,14 +67,9 @@ public class CompileFixturesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.basedir}/src/testFixtures/resources")
     private File fixturesResourcesDirectory;
 
-    // Output directory for fixtures. Temporary workaround: compile directly into test-classes
-    // so maven-compiler-plugin and surefire pick it up seamlessly.
-    @Parameter(defaultValue = "${project.build.testOutputDirectory}")
+    // Output directory for fixtures.
+    @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes")
     private File fixturesOutputDirectory;
-
-    // Temporary holding directory for packaging later
-    @Parameter(defaultValue = "${project.build.directory}/test-fixtures-classes", readonly = true)
-    private File packageOutputDirectory;
 
     @Parameter(defaultValue = "${project.artifactId}-test-fixtures")
     private String fixturesArtifactId;
@@ -123,10 +118,6 @@ public class CompileFixturesMojo extends AbstractMojo {
         if (!fixturesOutputDirectory.exists() && !fixturesOutputDirectory.mkdirs()) {
             throw new MojoExecutionException("Failed to create test output directory: " + fixturesOutputDirectory);
         }
-        
-        if (!packageOutputDirectory.exists() && !packageOutputDirectory.mkdirs()) {
-            throw new MojoExecutionException("Failed to create package output directory: " + packageOutputDirectory);
-        }
 
         // Process Resources
         if (hasResources) {
@@ -154,11 +145,15 @@ public class CompileFixturesMojo extends AbstractMojo {
                     project.getModel().addDependency(testDep);
                 }
             }
-            
+
             // Also explicitly resolve and add them to test classpath elements just in case
-            resolveFixtureDependencies().stream()
+            Set<String> existingElements = new HashSet<>(project.getTestClasspathElements());
+            Stream.concat(
+                    resolveFixtureDependencies().stream(),
+                    Stream.of(fixturesOutputDirectory.getAbsolutePath())
+                )
                 .distinct()
-                .filter(Predicate.not(new HashSet<>(project.getTestClasspathElements())::contains))
+                .filter(Predicate.not(existingElements::contains))
                 .forEach(project.getTestClasspathElements()::add);
 
             getLog().debug("Added fixture dependencies to Maven test model.");
@@ -219,49 +214,21 @@ public class CompileFixturesMojo extends AbstractMojo {
         if (result != 0) {
             throw new MojoExecutionException("Test fixtures compilation failed.");
         }
-
-        // Copy compiled classes to package output directory for packaging
-        copyDirectory(fixturesOutputDirectory, packageOutputDirectory);
     }
 
     private void processResources() throws MojoExecutionException {
         try (Stream<Path> paths = Files.walk(fixturesResourcesDirectory.toPath())) {
             paths.filter(Files::isRegularFile).forEach(source -> {
                 Path destOutput = fixturesOutputDirectory.toPath().resolve(fixturesResourcesDirectory.toPath().relativize(source));
-                Path destPackage = packageOutputDirectory.toPath().resolve(fixturesResourcesDirectory.toPath().relativize(source));
                 try {
                     Files.createDirectories(destOutput.getParent());
                     Files.copy(source, destOutput, StandardCopyOption.REPLACE_EXISTING);
-                    
-                    Files.createDirectories(destPackage.getParent());
-                    Files.copy(source, destPackage, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
             });
         } catch (Exception e) {
              throw new MojoExecutionException("Failed to process test fixture resources", e);
-        }
-    }
-
-    private void copyDirectory(File sourceLocation, File targetLocation) throws MojoExecutionException {
-        try (Stream<Path> paths = Files.walk(sourceLocation.toPath())) {
-            paths.forEach(source -> {
-                Path destination = targetLocation.toPath().resolve(sourceLocation.toPath().relativize(source));
-                try {
-                    if (Files.isDirectory(source)) {
-                        if (!Files.exists(destination)) {
-                            Files.createDirectory(destination);
-                        }
-                    } else {
-                        Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
-                    }
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
-        } catch (Exception e) {
-            throw new MojoExecutionException("Failed to copy compiled fixtures for packaging", e);
         }
     }
 
@@ -404,7 +371,7 @@ public class CompileFixturesMojo extends AbstractMojo {
         String relSource = pomParent.relativize(fixturesSourceDirectory.toPath()).toString().replace('\\', '/');
         build.setSourceDirectory(relSource);
 
-        String relOutput = pomParent.relativize(packageOutputDirectory.toPath()).toString().replace('\\', '/');
+        String relOutput = pomParent.relativize(fixturesOutputDirectory.toPath()).toString().replace('\\', '/');
         build.setOutputDirectory(relOutput);
 
         String[] targetPlugins = {

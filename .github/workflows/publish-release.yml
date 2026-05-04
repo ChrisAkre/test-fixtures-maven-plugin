@@ -56,8 +56,9 @@ jobs:
 
       - name: Sync main back to develop
         run: |
+          git fetch origin main:main develop:develop
           git checkout develop
-          git merge -X theirs origin/main --no-ff -m "chore: sync develop with main"
+          git merge origin/main --ff-only
           git push origin develop
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

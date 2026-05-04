@@ -42,7 +42,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -392,23 +391,6 @@ public class CompileFixturesMojo extends AbstractMojo {
 
             if (userPlugin != null) {
                 Plugin clonedPlugin = userPlugin.clone();
-                if ("maven-compiler-plugin".equals(artifactId)) {
-                    Object config = clonedPlugin.getConfiguration();
-                    Xpp3Dom dom;
-                    if (config instanceof Xpp3Dom) {
-                        dom = (Xpp3Dom) config;
-                    } else {
-                        dom = new Xpp3Dom("configuration");
-                        clonedPlugin.setConfiguration(dom);
-                    }
-
-                    Xpp3Dom skipMainDom = dom.getChild("skipMain");
-                    if (skipMainDom == null) {
-                        skipMainDom = new Xpp3Dom("skipMain");
-                        dom.addChild(skipMainDom);
-                    }
-                    skipMainDom.setValue("true");
-                }
                 build.addPlugin(clonedPlugin);
             }
         }

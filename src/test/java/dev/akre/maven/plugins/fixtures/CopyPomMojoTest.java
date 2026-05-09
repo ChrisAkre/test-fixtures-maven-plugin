@@ -129,9 +129,10 @@ class CopyPomMojoTest {
         Path sourcePom = tempDir.resolve("source.pom");
         Files.writeString(sourcePom, "content");
 
-        // Create a directory where the file should be, causing an IOException during copy
+        // Create a non-empty directory where the file should be, causing an IOException during copy
         Path targetDir = tempDir.resolve("target-dir");
         Files.createDirectories(targetDir);
+        Files.writeString(targetDir.resolve("child.txt"), "child content");
 
         when(project.getArtifactId()).thenReturn("my-project");
         when(project.getVersion()).thenReturn("1.0.0");

@@ -59,6 +59,18 @@ public class CopyPomMojo extends AbstractMojo {
 
         getLog().info("Copying test fixtures POM to " + copyTarget.getAbsolutePath());
 
+        // Security check: Ensure copyTarget is within the project base directory to prevent arbitrary file write
+        try {
+            String baseDirPath = project.getBasedir().getCanonicalPath();
+            String targetPath = copyTarget.getCanonicalPath();
+
+            if (!targetPath.startsWith(baseDirPath + File.separator) && !targetPath.equals(baseDirPath)) {
+                throw new MojoExecutionException("Target path is outside the project base directory: " + copyTarget.getAbsolutePath());
+            }
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to validate target path", e);
+        }
+
         try {
             if (copyTarget.getParentFile() != null && !copyTarget.getParentFile().exists()) {
                 if (!copyTarget.getParentFile().mkdirs()) {

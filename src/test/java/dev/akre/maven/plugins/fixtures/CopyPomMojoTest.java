@@ -2,9 +2,12 @@ package dev.akre.maven.plugins.fixtures;
 
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,72 +18,172 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-public class CopyPomMojoTest {
+/**
+ * Unit tests for {@link CopyPomMojo}.
+ */
+@ExtendWith(MockitoExtension.class)
+class CopyPomMojoTest {
 
+    @InjectMocks
     private CopyPomMojo mojo;
+
+    @Mock
     private MavenProject project;
 
     @TempDir
     Path tempDir;
 
-    @BeforeEach
-    public void setUp() throws Exception {
-        mojo = new CopyPomMojo();
-        project = mock(MavenProject.class);
-        setField(mojo, "project", project);
-
-        Path baseDir = tempDir.resolve("project").toAbsolutePath();
-        Files.createDirectories(baseDir);
-        when(project.getBasedir()).thenReturn(baseDir.toFile());
-        when(project.getArtifactId()).thenReturn("my-artifact");
-        when(project.getVersion()).thenReturn("1.0.0");
-    }
-
-    private void setField(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
+    private void setField(String fieldName, Object value) throws Exception {
+        Field field = CopyPomMojo.class.getDeclaredField(fieldName);
         field.setAccessible(true);
-        field.set(target, value);
+        field.set(mojo, value);
     }
 
     @Test
-    public void testExecuteVulnerablePath() throws Exception {
-        Path baseDir = project.getBasedir().toPath();
-        Path fixturesPomPath = baseDir.resolve("target/my-artifact-test-fixtures-1.0.0.pom");
-        Files.createDirectories(fixturesPomPath.getParent());
-        Files.writeString(fixturesPomPath, "<project/>");
-
-        setField(mojo, "fixturesPom", fixturesPomPath.toFile());
-        setField(mojo, "fixturesArtifactId", "my-artifact-test-fixtures");
-
-        // Malicious path outside baseDir
-        Path maliciousPath = tempDir.resolve("malicious.pom").toAbsolutePath();
-        setField(mojo, "copyTarget", maliciousPath.toFile());
-
-        // Now, this should throw MojoExecutionException
-        MojoExecutionException exception = assertThrows(MojoExecutionException.class, () -> {
-            mojo.execute();
-        });
-
-        assertTrue(exception.getMessage().contains("outside the project base directory"));
-        assertFalse(Files.exists(maliciousPath), "File should NOT have been copied to malicious path");
-    }
-
-    @Test
-    public void testExecuteValidPath() throws Exception {
-        Path baseDir = project.getBasedir().toPath();
-        Path fixturesPomPath = baseDir.resolve("target/my-artifact-test-fixtures-1.0.0.pom");
-        Files.createDirectories(fixturesPomPath.getParent());
-        Files.writeString(fixturesPomPath, "<project/>");
-
-        setField(mojo, "fixturesPom", fixturesPomPath.toFile());
-        setField(mojo, "fixturesArtifactId", "my-artifact-test-fixtures");
-
-        // Valid path inside baseDir
-        Path validPath = baseDir.resolve("test-fixtures/pom.xml");
-        setField(mojo, "copyTarget", validPath.toFile());
+    void testExecuteSkip() throws Exception {
+        setField("skip", true);
 
         mojo.execute();
 
-        assertTrue(Files.exists(validPath), "File should have been copied to valid path");
+        // Should return early; if it didn't, it would likely fail on other uninitialized fields
+        verifyNoInteractions(project);
+    }
+
+    @Test
+    void testExecutePomNotFound() throws Exception {
+        setField("skip", false);
+        setField("fixturesPom", new File(tempDir.toFile(), "non-existent.pom"));
+        when(project.getArtifactId()).thenReturn("my-project");
+        when(project.getVersion()).thenReturn("1.0.0");
+        setField("fixturesArtifactId", "my-project-test-fixtures");
+
+        mojo.execute();
+        // Should just log and return
+    }
+
+    @Test
+    void testExecuteSuccess() throws Exception {
+        Path baseDir = tempDir.resolve("project").toAbsolutePath();
+        Files.createDirectories(baseDir);
+        when(project.getBasedir()).thenReturn(baseDir.toFile());
+
+        Path sourcePom = baseDir.resolve("source.pom");
+        Files.writeString(sourcePom, "test-pom-content");
+        Path targetPom = baseDir.resolve("target/copied.pom");
+
+        when(project.getArtifactId()).thenReturn("my-project");
+        when(project.getVersion()).thenReturn("1.0.0");
+
+        setField("skip", false);
+        setField("fixturesArtifactId", "my-project-test-fixtures");
+        setField("fixturesPom", sourcePom.toFile());
+        setField("copyTarget", targetPom.toFile());
+
+        mojo.execute();
+
+        assertTrue(Files.exists(targetPom));
+        assertEquals("test-pom-content", Files.readString(targetPom));
+    }
+
+    @Test
+    void testExecuteWithCustomArtifactId() throws Exception {
+        Path baseDir = tempDir.resolve("project").toAbsolutePath();
+        Files.createDirectories(baseDir);
+        when(project.getBasedir()).thenReturn(baseDir.toFile());
+
+        Path sourceDir = baseDir.resolve("source-dir");
+        Files.createDirectories(sourceDir);
+        Path sourcePom = sourceDir.resolve("custom-fixtures-1.0.0.pom");
+        Files.writeString(sourcePom, "custom-content");
+        Path targetPom = baseDir.resolve("target.pom");
+
+        when(project.getArtifactId()).thenReturn("my-project");
+        when(project.getVersion()).thenReturn("1.0.0");
+
+        setField("skip", false);
+        setField("fixturesArtifactId", "custom-fixtures");
+        // Initial path points to the default one
+        setField("fixturesPom", new File(sourceDir.toFile(), "my-project-test-fixtures-1.0.0.pom"));
+        setField("copyTarget", targetPom.toFile());
+
+        mojo.execute();
+
+        assertTrue(Files.exists(targetPom));
+        assertEquals("custom-content", Files.readString(targetPom));
+    }
+
+    @Test
+    void testExecuteCreateParentDirs() throws Exception {
+        Path baseDir = tempDir.resolve("project").toAbsolutePath();
+        Files.createDirectories(baseDir);
+        when(project.getBasedir()).thenReturn(baseDir.toFile());
+
+        Path sourcePom = baseDir.resolve("source.pom");
+        Files.writeString(sourcePom, "content");
+        // Nested target directory that doesn't exist
+        Path targetPom = baseDir.resolve("a/b/c/target.pom");
+
+        when(project.getArtifactId()).thenReturn("my-project");
+        when(project.getVersion()).thenReturn("1.0.0");
+
+        setField("skip", false);
+        setField("fixturesArtifactId", "my-project-test-fixtures");
+        setField("fixturesPom", sourcePom.toFile());
+        setField("copyTarget", targetPom.toFile());
+
+        mojo.execute();
+
+        assertTrue(Files.exists(targetPom));
+        assertTrue(Files.exists(targetPom.getParent()));
+    }
+
+    @Test
+    void testExecuteError() throws Exception {
+        Path baseDir = tempDir.resolve("project").toAbsolutePath();
+        Files.createDirectories(baseDir);
+        when(project.getBasedir()).thenReturn(baseDir.toFile());
+
+        Path sourcePom = baseDir.resolve("source.pom");
+        Files.writeString(sourcePom, "content");
+
+        // Create a non-empty directory where the file should be, causing an IOException during copy
+        Path targetDir = baseDir.resolve("target-dir");
+        Files.createDirectories(targetDir);
+        Files.writeString(targetDir.resolve("child.txt"), "child content");
+
+        when(project.getArtifactId()).thenReturn("my-project");
+        when(project.getVersion()).thenReturn("1.0.0");
+
+        setField("skip", false);
+        setField("fixturesArtifactId", "my-project-test-fixtures");
+        setField("fixturesPom", sourcePom.toFile());
+        setField("copyTarget", targetDir.toFile());
+
+        assertThrows(MojoExecutionException.class, () -> mojo.execute());
+    }
+
+    @Test
+    void testExecuteVulnerablePath() throws Exception {
+        Path baseDir = tempDir.resolve("project").toAbsolutePath();
+        Files.createDirectories(baseDir);
+        when(project.getBasedir()).thenReturn(baseDir.toFile());
+
+        Path sourcePom = baseDir.resolve("source.pom");
+        Files.writeString(sourcePom, "content");
+
+        // Malicious path outside baseDir
+        Path maliciousPath = tempDir.resolve("malicious.pom").toAbsolutePath();
+
+        when(project.getArtifactId()).thenReturn("my-project");
+        when(project.getVersion()).thenReturn("1.0.0");
+
+        setField("skip", false);
+        setField("fixturesArtifactId", "my-project-test-fixtures");
+        setField("fixturesPom", sourcePom.toFile());
+        setField("copyTarget", maliciousPath.toFile());
+
+        MojoExecutionException exception = assertThrows(MojoExecutionException.class, () -> mojo.execute());
+        assertTrue(exception.getMessage().contains("outside the project base directory"));
+        assertFalse(Files.exists(maliciousPath));
     }
 }

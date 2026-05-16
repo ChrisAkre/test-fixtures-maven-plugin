@@ -94,7 +94,6 @@ public class TestFixturesWorkspaceReaderTest {
         reader.init(session);
         when(artifact.getGroupId()).thenReturn("my.group");
         when(artifact.getArtifactId()).thenReturn("my-artifact");
-        when(artifact.getVersion()).thenReturn("1.0.0");
         when(artifact.getExtension()).thenReturn("jar");
         when(project.getArtifact()).thenReturn(mavenArtifact);
         when(mavenArtifact.getFile()).thenReturn(null);
@@ -109,7 +108,6 @@ public class TestFixturesWorkspaceReaderTest {
         reader.init(session);
         when(artifact.getGroupId()).thenReturn("my.group");
         when(artifact.getArtifactId()).thenReturn("my-artifact");
-        when(artifact.getVersion()).thenReturn("1.0.0");
         when(artifact.getExtension()).thenReturn("pom");
         when(project.getFile()).thenReturn(new File("pom.xml"));
 
